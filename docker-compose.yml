@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: areaflow-postgres
+    environment:
+      POSTGRES_DB: areaflow
+      POSTGRES_USER: areaflow
+      POSTGRES_PASSWORD: areaflow
+    ports:
+      - "54329:5432"
+    volumes:
+      - areaflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U areaflow -d areaflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  areaflow-postgres-data:

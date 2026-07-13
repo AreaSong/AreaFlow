@@ -1,0 +1,114 @@
+version: 1
+
+project:
+  id: areamatrix
+  name: AreaMatrix
+  root: /Users/as/Ai-Project/project/AreaMatrix
+  kind: product-repo
+  adapter: areamatrix
+  workflow_profile: areamatrix
+  default_branch: main
+
+ownership:
+  mode: import
+  source_of_truth:
+    product_docs: project
+    source_code: project
+    workflow: project
+    execution: project
+    status_summary: areaflow
+  cutover:
+    enabled: false
+    new_versions_owned_by: project
+    legacy_versions_mode: project_owned
+    execution_owned_by: project
+
+artifact_store:
+  backend: local
+  root: ~/.areaflow/artifacts
+
+permissions:
+  capabilities:
+    read_project: true
+    write_status: true
+    write_artifacts: true
+    write_workflow: false
+    write_generated: false
+    write_code: false
+    run_commands: false
+    manage_workers: false
+    manage_git: false
+    network: false
+    use_secrets: false
+    execute_agents: false
+
+  read_paths:
+    - AGENTS.md
+    - docs/**
+    - workflow/**
+    - tasks/**
+    - .ai-governance/**
+
+  write_paths:
+    - .areaflow/status.json
+
+  forbidden_paths:
+    - workflow/versions/*/execution/**
+    - workflow/versions/*/execution/_shared/progress.json
+    - .areamatrix/**
+    - "**/*.sqlite"
+    - "**/*.db"
+
+commands:
+  allowed:
+    - ./dev tasks status
+    - ./dev workflow doctor
+  forbidden:
+    - ./task-loop run
+    - git reset --hard
+    - git checkout --
+    - rm -rf
+
+scheduling:
+  priority: 100
+  max_parallel_tasks: 1
+  agent_role: local_worker
+  required_capabilities:
+    - read_project
+    - write_artifacts
+  engine_profile: codex-cli
+
+engines:
+  default: codex-cli
+  profiles:
+    - id: codex-cli
+      provider: codex-cli
+      secret_ref: none
+      enabled: false
+      resource_limits:
+        max_active_leases: 1
+        max_queued_tasks: 20
+    - id: openai-main
+      provider: openai
+      secret_ref: openai/default
+      enabled: false
+      resource_limits:
+        max_active_leases: 1
+        max_queued_tasks: 10
+
+status_export:
+  enabled: true
+  path: .areaflow/status.json
+  human_summary:
+    enabled: false
+    path: workflow/README.md
+    block_marker: AREAFLOW_STATUS
+
+migration:
+  strategy: import_mirror_shadow_cutover_archive
+  phase: import
+  imported_versions:
+    - v1-mvp
+    - v-template
+  immutable_imports:
+    - v1-mvp

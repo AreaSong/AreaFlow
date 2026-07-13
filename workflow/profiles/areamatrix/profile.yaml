@@ -1,0 +1,341 @@
+profile_id: areamatrix
+profile_version: 0
+display_name: AreaMatrix Workflow Profile
+description: AreaMatrix dogfood workflow lifecycle mapped onto the AreaFlow stage engine.
+
+adapter_defaults:
+  adapter: areamatrix
+  workflow_profile: areamatrix
+
+version_binding:
+  freeze_profile_hash: true
+  upgrade_policy: explicit
+
+item_states:
+  - draft
+  - ready
+  - blocked
+  - deferred
+  - promoted
+  - running
+  - done
+  - superseded
+
+stages:
+  - name: intake
+    purpose: Capture request intent and decide whether full workflow planning is required.
+    required_artifacts:
+      - intake_note
+    allowed_outputs:
+      - workflow_intent
+    gate_checks:
+      - import_coverage
+    failure_routes:
+      - source_docs
+
+  - name: source_docs
+    purpose: Reference project-owned docs, API, architecture, and governance sources.
+    required_artifacts:
+      - source_reference
+    allowed_outputs:
+      - docs_baseline
+    gate_checks:
+      - hash_drift
+    failure_routes:
+      - intake
+
+  - name: templates
+    purpose: Bind the profile templates used to create version-local workflow artifacts.
+    required_artifacts:
+      - profile_template
+      - stage_template
+    allowed_outputs:
+      - template_baseline
+    gate_checks:
+      - stage_coverage
+    failure_routes:
+      - source_docs
+
+  - name: version_init
+    purpose: Create workflow version metadata and freeze profile binding.
+    required_artifacts:
+      - version_metadata
+    allowed_outputs:
+      - workflow_version
+    gate_checks:
+      - profile_binding_drift
+      - write_permission
+    failure_routes:
+      - templates
+
+  - name: discussion
+    purpose: Record docs discussion, middle-layer discussion, decisions, open questions, and risk boundaries.
+    required_artifacts:
+      - docs_discussion
+      - middle_layer_discussion
+      - decisions_ledger
+    allowed_outputs:
+      - discussion_package
+    gate_checks:
+      - discussion_gate
+    failure_routes:
+      - source_docs
+
+  - name: middle_layer
+    purpose: Map confirmed docs intent into feature-level implementation ledgers.
+    required_artifacts:
+      - middle_layer_ledger
+    allowed_outputs:
+      - feature_ledger
+    gate_checks:
+      - stage_coverage
+    failure_routes:
+      - discussion
+
+  - name: changes
+    purpose: Track docs-change ledgers that agree with middle-layer feature intent.
+    required_artifacts:
+      - change_ledger
+    allowed_outputs:
+      - docs_change
+    gate_checks:
+      - plan_doctor
+    failure_routes:
+      - middle_layer
+
+  - name: plans
+    purpose: Produce handoff-safe human plans with exact paths, validation, risks, and rollback wording.
+    required_artifacts:
+      - plan
+    allowed_outputs:
+      - implementation_plan
+    gate_checks:
+      - plan_doctor
+    failure_routes:
+      - changes
+
+  - name: drafts
+    purpose: Produce manifest, copy-ready prompt, and verify-ready prompt packages.
+    required_artifacts:
+      - manifest
+      - copy_ready_prompt
+      - verify_ready_prompt
+    allowed_outputs:
+      - draft_manifest
+      - draft_copy
+      - draft_verify
+    gate_checks:
+      - draft_doctor
+    failure_routes:
+      - plans
+
+  - name: queue
+    purpose: Review version-local queue candidates before promotion preview.
+    required_artifacts:
+      - queue_yaml
+      - queue_review
+    allowed_outputs:
+      - queue_candidate
+    gate_checks:
+      - queue_doctor
+    failure_routes:
+      - drafts
+
+  - name: promotion_preview
+    purpose: Dry-run live label mapping and scope checks without applying execution files.
+    required_artifacts:
+      - promotion_yaml
+      - promotion_review
+    allowed_outputs:
+      - promotion_preview
+    gate_checks:
+      - promotion_preview
+    failure_routes:
+      - queue
+
+  - name: approval
+    purpose: Record explicit human or system approval decisions and risk acknowledgements.
+    required_artifacts:
+      - approval_record
+    allowed_outputs:
+      - approval_scope
+    gate_checks:
+      - approval_gate
+      - live_mapping_gate
+    failure_routes:
+      - promotion_preview
+
+  - name: execution
+    purpose: Materialize approved execution scope for the runner model.
+    required_artifacts:
+      - execution_package
+    allowed_outputs:
+      - run_task_candidates
+    gate_checks:
+      - runner_gate
+    failure_routes:
+      - approval
+
+  - name: run
+    purpose: Execute approved tasks as run tasks and immutable attempts.
+    required_artifacts:
+      - copy_attempt
+      - verify_attempt
+      - checkpoint_attempt
+    allowed_outputs:
+      - run_result
+    gate_checks:
+      - checkpoint_gate
+    failure_routes:
+      - execution
+
+  - name: projection
+    purpose: Project execution results back to workflow items, plans, drafts, and queue candidates.
+    required_artifacts:
+      - projection_report
+    allowed_outputs:
+      - projected_status
+    gate_checks:
+      - projection_gate
+    failure_routes:
+      - run
+
+  - name: closeout
+    purpose: Close the version with evidence, residual decisions, and archive metadata.
+    required_artifacts:
+      - closeout_report
+      - evidence_summary
+    allowed_outputs:
+      - archived_version
+    gate_checks:
+      - closeout_gate
+    failure_routes:
+      - projection
+
+transitions:
+  - from: intake
+    to: source_docs
+  - from: source_docs
+    to: templates
+  - from: templates
+    to: version_init
+  - from: version_init
+    to: discussion
+  - from: discussion
+    to: middle_layer
+    required_gate: discussion_gate
+  - from: middle_layer
+    to: changes
+  - from: changes
+    to: plans
+    required_gate: plan_doctor
+  - from: plans
+    to: drafts
+    required_gate: plan_doctor
+  - from: drafts
+    to: queue
+    required_gate: draft_doctor
+  - from: queue
+    to: promotion_preview
+    required_gate: queue_doctor
+  - from: promotion_preview
+    to: approval
+    required_gate: promotion_preview
+  - from: approval
+    to: execution
+    required_gate: live_mapping_gate
+  - from: execution
+    to: run
+    required_gate: runner_gate
+  - from: run
+    to: projection
+    required_gate: checkpoint_gate
+  - from: projection
+    to: closeout
+    required_gate: projection_gate
+
+gates:
+  - name: import_coverage
+    earliest_phase: v0.1
+    status_source: gate_results
+  - name: write_permission
+    earliest_phase: v0.1
+    status_source: audit_events
+  - name: profile_binding_drift
+    earliest_phase: v0.4
+    status_source: gate_results
+  - name: status_mirror
+    earliest_phase: v0.1
+    status_source: gate_results
+  - name: hash_drift
+    earliest_phase: v0.2
+    status_source: gate_results
+  - name: stage_coverage
+    earliest_phase: v0.2
+    status_source: gate_results
+  - name: discussion_gate
+    earliest_phase: v0.3
+    status_source: gate_results
+  - name: plan_doctor
+    earliest_phase: v0.3
+    status_source: gate_results
+  - name: draft_doctor
+    earliest_phase: v0.3
+    status_source: gate_results
+  - name: queue_doctor
+    earliest_phase: v0.3
+    status_source: gate_results
+  - name: promotion_preview
+    earliest_phase: v0.3
+    status_source: gate_results
+  - name: approval_gate
+    earliest_phase: v0.4
+    status_source: approval_records
+  - name: live_mapping_gate
+    earliest_phase: v0.4
+    status_source: gate_results
+  - name: runner_gate
+    earliest_phase: v0.5
+    status_source: gate_results
+  - name: checkpoint_gate
+    earliest_phase: v0.6
+    status_source: gate_results
+  - name: projection_gate
+    earliest_phase: v0.5
+    status_source: gate_results
+  - name: closeout_gate
+    earliest_phase: v0.5
+    status_source: gate_results
+
+hard_rules:
+  - discussion_gate must pass before changes.
+  - plan_doctor must pass before drafts.
+  - draft_doctor must pass before queue.
+  - queue_doctor must pass before promotion_preview.
+  - promotion_preview pass is not apply.
+  - approval approved is not execution.
+  - live_mapping_gate pass is not cutover by itself.
+  - runner_gate must pass before real execution.
+  - projection_gate must pass before closeout.
+  - closeout_gate must prove evidence before done.
+
+artifact_policy:
+  metadata_source: postgres
+  content_source: artifact_store
+  source_docs_owner: managed_project
+  generated_output_owner: areaflow
+  default_content_backend: local
+
+permissions:
+  default_mode: readonly
+  write_requires:
+    - capability
+    - path_allowlist
+    - gate_result
+    - approval_record
+    - audit_event
+
+cutover:
+  strategy: import_mirror_shadow_cutover_archive
+  v0_4_scope: authoring_source_of_truth_only
+  execution_cutover_phase: v0.6

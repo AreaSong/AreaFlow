@@ -1,0 +1,24 @@
+# Build outputs
+/areaflow
+/bin/
+/dist/
+/web/dist/
+
+# Local runtime
+/.areaflow/
+
+# Go
+/coverage.out
+
+# Web
+/web/node_modules/
+/web/coverage/
+
+# Desktop
+/desktop/node_modules/
+/desktop/dist/
+/desktop/src-tauri/gen/
+/desktop/src-tauri/target/
+
+# OS/editor noise
+.DS_Store

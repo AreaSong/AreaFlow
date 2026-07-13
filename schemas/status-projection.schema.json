@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://areaflow.local/schemas/status-projection.schema.json",
+  "title": "AreaFlow Status Projection",
+  "description": "Stable fallback .areaflow/status.json projection for managed project shims and offline status readers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_id",
+    "project_name",
+    "area_flow_url",
+    "cutover_phase",
+    "active_versions",
+    "last_synced_at",
+    "source_snapshot_hash",
+    "compatibility"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "area_flow_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cutover_phase": {
+      "type": "string",
+      "minLength": 1
+    },
+    "active_versions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "display_label",
+          "version_kind",
+          "lifecycle_status",
+          "rough_progress"
+        ],
+        "properties": {
+          "display_label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version_kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lifecycle_status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rough_progress": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "percent",
+              "label",
+              "blocked"
+            ],
+            "properties": {
+              "percent": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "blocked": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "last_synced_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_snapshot_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shim_lifecycle_state",
+        "offline_source",
+        "blocked_commands"
+      ],
+      "properties": {
+        "shim_lifecycle_state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "offline_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocked_commands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
