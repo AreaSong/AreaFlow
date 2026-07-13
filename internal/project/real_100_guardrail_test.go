@@ -218,6 +218,18 @@ func TestNormalizeReal100GuardrailFallsBackAndCopiesBlockers(t *testing.T) {
 	}
 }
 
+func TestNormalizeReal100GuardrailPreservesCompleteClosure(t *testing.T) {
+	guardrail := NormalizeReal100Guardrail(Real100Guardrail{
+		Real100Status:            Real100StatusComplete,
+		ReleaseCandidateDecision: "release_candidate_ready",
+	}, CompletionAuditReal100Guardrail())
+
+	if guardrail.Real100Status != Real100StatusComplete || len(guardrail.Real100Blockers) != 0 ||
+		guardrail.NotReal100 || guardrail.EvidenceOnly || guardrail.StatusAloneIsNotCompletion {
+		t.Fatalf("complete closure must not inherit blocked fallback fields: %+v", guardrail)
+	}
+}
+
 func assertReal100Guardrail(t *testing.T, name string, guardrail Real100Guardrail, wantScope string, wantBlockers []string) {
 	t.Helper()
 	if guardrail.ClaimScope != wantScope ||

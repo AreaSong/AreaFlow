@@ -82,6 +82,44 @@ func TestBuildReleaseAcceptanceGatePassesReadyDecisions(t *testing.T) {
 	assertAcceptanceGateItem(t, gate, "gate:accept:release_readiness", "release", "pass", "ready", "none")
 }
 
+func TestBuildReleaseAcceptanceGatePassesMatchingEffectiveException(t *testing.T) {
+	preview := ReleaseAcceptancePreview{Decisions: []ReleaseAcceptanceDecision{{
+		Key: "accept:restore_plan", Category: "restore", Status: "needs_decision",
+		AcceptanceType: "metadata_only_history", Owner: "release_owner", RequiredEvidence: []string{"evidence"},
+	}}}
+	exceptions := []ReleaseExceptionRecord{{
+		ID: 7, ExceptionKey: "release_exception:restore_plan", SourceGateItem: "gate:accept:restore_plan",
+		AcceptanceType: "metadata_only_history", Status: "approved", Owner: "archive_owner",
+		Metadata: map[string]any{"source_fingerprint": releaseExceptionSourceFingerprint(
+			"gate:accept:restore_plan", "restore", "metadata_only_history", "release_owner", []string{"evidence"},
+		)},
+	}}
+
+	gate := BuildReleaseAcceptanceGateWithExceptions(preview, ReleaseAcceptanceGateOptions{}, exceptions)
+	if gate.Status != "pass" || gate.Items[0].Status != "pass" || gate.Items[0].DecisionStatus != "ready" {
+		t.Fatalf("matching effective exception should pass acceptance gate: %+v", gate)
+	}
+	if gate.Items[0].Metadata["approved_exception_id"] != int64(7) {
+		t.Fatalf("approved exception evidence missing: %+v", gate.Items[0].Metadata)
+	}
+}
+
+func TestBuildReleaseAcceptanceGateIgnoresMismatchedException(t *testing.T) {
+	preview := ReleaseAcceptancePreview{Decisions: []ReleaseAcceptanceDecision{{
+		Key: "accept:restore_plan", Category: "restore", Status: "needs_decision",
+		AcceptanceType: "metadata_only_history", Owner: "release_owner", RequiredEvidence: []string{"evidence"},
+	}}}
+	exceptions := []ReleaseExceptionRecord{{
+		SourceGateItem: "gate:accept:restore_plan", AcceptanceType: "future_only_gap", Status: "approved",
+		Metadata: map[string]any{"source_fingerprint": "mismatch"},
+	}}
+
+	gate := BuildReleaseAcceptanceGateWithExceptions(preview, ReleaseAcceptanceGateOptions{}, exceptions)
+	if gate.Status != "blocked" {
+		t.Fatalf("mismatched exception must not pass acceptance gate: %+v", gate)
+	}
+}
+
 func TestBuildReleaseAcceptanceGateBlocksNotAcceptableDecisions(t *testing.T) {
 	gate := BuildReleaseAcceptanceGate(
 		ReleaseAcceptancePreview{

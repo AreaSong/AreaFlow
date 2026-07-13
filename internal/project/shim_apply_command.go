@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	shimApplyCommandMode = "shim_apply_command_v1"
-	shimApplyCommandType = "project.shim.apply"
+	shimApplyCommandMode      = "shim_apply_command_v1"
+	shimApplyCommandType      = "project.shim.apply"
+	shimApplyCommandEventType = "project.shim.apply.recorded"
 )
 
 type ApplyShimCommandOptions struct {
@@ -254,7 +255,7 @@ func insertShimApplyCommandEvent(ctx context.Context, tx pgx.Tx, result ApplyShi
 	if err != nil {
 		return 0, fmt.Errorf("marshal shim apply command event metadata: %w", err)
 	}
-	eventType := "project.shim.apply.recorded"
+	eventType := shimApplyCommandEventType
 	severity := "info"
 	message := "Shim apply command recorded"
 	if result.Decision == "denied" {

@@ -3,6 +3,8 @@ package project
 import (
 	"context"
 	"time"
+
+	"github.com/areasong/areaflow/internal/migrate"
 )
 
 type ReleaseExceptionMigrationApprovalGateOptions struct {
@@ -42,7 +44,15 @@ func (s Store) ReleaseExceptionMigrationApprovalGate(ctx context.Context, option
 	if err != nil {
 		return ReleaseExceptionMigrationApprovalGate{}, err
 	}
-	return BuildReleaseExceptionMigrationApprovalGate(schemaPreview, options), nil
+	approval, err := migrate.Approval(ctx, s.pool, migrate.ReleaseExceptionMigrationName)
+	if err != nil {
+		return ReleaseExceptionMigrationApprovalGate{}, err
+	}
+	effective, err := migrate.ApprovalEffective(migrate.ReleaseExceptionMigrationName, approval)
+	if err != nil {
+		return ReleaseExceptionMigrationApprovalGate{}, err
+	}
+	return buildReleaseExceptionMigrationApprovalGate(schemaPreview, options, approval, effective), nil
 }
 
 func normalizeReleaseExceptionMigrationApprovalGateOptions(options ReleaseExceptionMigrationApprovalGateOptions) ReleaseExceptionMigrationApprovalGateOptions {
@@ -51,6 +61,15 @@ func normalizeReleaseExceptionMigrationApprovalGateOptions(options ReleaseExcept
 }
 
 func BuildReleaseExceptionMigrationApprovalGate(schemaPreview ReleaseExceptionSchemaPreview, options ReleaseExceptionMigrationApprovalGateOptions) ReleaseExceptionMigrationApprovalGate {
+	return BuildReleaseExceptionMigrationApprovalGateWithState(schemaPreview, options, migrate.ApprovalState{})
+}
+
+func BuildReleaseExceptionMigrationApprovalGateWithState(schemaPreview ReleaseExceptionSchemaPreview, options ReleaseExceptionMigrationApprovalGateOptions, approval migrate.ApprovalState) ReleaseExceptionMigrationApprovalGate {
+	effective, _ := migrate.ApprovalEffective(migrate.ReleaseExceptionMigrationName, approval)
+	return buildReleaseExceptionMigrationApprovalGate(schemaPreview, options, approval, effective)
+}
+
+func buildReleaseExceptionMigrationApprovalGate(schemaPreview ReleaseExceptionSchemaPreview, options ReleaseExceptionMigrationApprovalGateOptions, approval migrate.ApprovalState, approvalEffective bool) ReleaseExceptionMigrationApprovalGate {
 	options = normalizeReleaseExceptionMigrationApprovalGateOptions(options)
 	scope, projectKey := releaseScopeAndProjectKey(options.ProjectID, options.ProjectKey, schemaPreview.ProjectKey, schemaPreview.RecordPreview.ProjectKey)
 	gate := ReleaseExceptionMigrationApprovalGate{
@@ -81,7 +100,7 @@ func BuildReleaseExceptionMigrationApprovalGate(schemaPreview ReleaseExceptionSc
 		},
 		GeneratedAt: options.GeneratedAt,
 	}
-	gate.addItem(releaseExceptionMigrationApprovalItem(schemaPreview))
+	gate.addItem(releaseExceptionMigrationApprovalItem(schemaPreview, approval, approvalEffective))
 	return gate
 }
 
@@ -95,7 +114,7 @@ func (g *ReleaseExceptionMigrationApprovalGate) addItem(item ReleaseExceptionMig
 	}
 }
 
-func releaseExceptionMigrationApprovalItem(schemaPreview ReleaseExceptionSchemaPreview) ReleaseExceptionMigrationApprovalGateItem {
+func releaseExceptionMigrationApprovalItem(schemaPreview ReleaseExceptionSchemaPreview, approval migrate.ApprovalState, approvalEffective bool) ReleaseExceptionMigrationApprovalGateItem {
 	metadata := map[string]any{
 		"schema_preview_status": schemaPreview.Status,
 		"table_count":           len(schemaPreview.Tables),
@@ -104,6 +123,10 @@ func releaseExceptionMigrationApprovalItem(schemaPreview ReleaseExceptionSchemaP
 		"audit_action_count":    len(schemaPreview.AuditActions),
 		"risk_level":            "R4 migration_security",
 		"migration_writable":    false,
+		"migration_name":        migrate.ReleaseExceptionMigrationName,
+		"migration_applied":     approval.Applied,
+		"approval_actor":        approval.Actor,
+		"approval_effective":    approvalEffective,
 	}
 	switch schemaPreview.Status {
 	case "blocked":
@@ -119,6 +142,49 @@ func releaseExceptionMigrationApprovalItem(schemaPreview ReleaseExceptionSchemaP
 			Metadata:         metadata,
 		}
 	case "needs_approval":
+		if approval.Status == "approved" && approvalEffective {
+			metadata["approval_status"] = approval.Status
+			metadata["migration_hash"] = approval.MigrationHash
+			return ReleaseExceptionMigrationApprovalGateItem{
+				Key:              "migration_approval:release_exception_schema",
+				Category:         "migration",
+				Status:           "pass",
+				ApprovalStatus:   "approved",
+				Message:          "explicit R4 migration approval is effective for the release exception schema",
+				Owner:            "release_owner",
+				RequiredEvidence: []string{"migration approval remains approved and bound to the embedded 000012 migration hash"},
+				NextCommand:      "areaflow release exception-migration-apply",
+				Metadata:         metadata,
+			}
+		}
+		if approval.Status == "approved" {
+			metadata["approval_status"] = "stale"
+			return ReleaseExceptionMigrationApprovalGateItem{
+				Key:              "migration_approval:release_exception_schema",
+				Category:         "migration",
+				Status:           "blocked",
+				ApprovalStatus:   "stale",
+				Message:          "release exception migration approval does not match the embedded migration hash",
+				Owner:            "release_owner",
+				RequiredEvidence: []string{"review the current 000012 migration and record a new explicit approval"},
+				NextCommand:      "areaflow release exception-migration-approve --actor ACTOR --reason TEXT",
+				Metadata:         metadata,
+			}
+		}
+		if approval.Status == "revoked" {
+			metadata["approval_status"] = approval.Status
+			return ReleaseExceptionMigrationApprovalGateItem{
+				Key:              "migration_approval:release_exception_schema",
+				Category:         "migration",
+				Status:           "blocked",
+				ApprovalStatus:   "revoked",
+				Message:          "release exception migration approval has been revoked",
+				Owner:            "release_owner",
+				RequiredEvidence: []string{"record a new explicit R4 migration approval before apply or exception writes"},
+				NextCommand:      "areaflow release exception-migration-approve --actor ACTOR --reason TEXT",
+				Metadata:         metadata,
+			}
+		}
 		return ReleaseExceptionMigrationApprovalGateItem{
 			Key:            "migration_approval:release_exception_schema",
 			Category:       "migration",

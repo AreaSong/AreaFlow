@@ -4,6 +4,7 @@ import "strings"
 
 const (
 	Real100StatusBlocked          = "blocked"
+	Real100StatusComplete         = "complete"
 	ReleasePreviewReadinessScope  = "areaflow_release_preview_only"
 	CompletionAuditReadinessScope = "completion_audit_evidence_only"
 )
@@ -73,6 +74,25 @@ func CompletionAuditReal100GuardrailForItems(items []CompletionAuditItem) Real10
 }
 
 func NormalizeReal100Guardrail(guardrail Real100Guardrail, fallback Real100Guardrail) Real100Guardrail {
+	if guardrail.Real100Status == Real100StatusComplete {
+		if guardrail.ClaimScope == "" {
+			guardrail.ClaimScope = fallback.ClaimScope
+		}
+		if guardrail.ReleaseCandidateDecision == "" {
+			guardrail.ReleaseCandidateDecision = "release_candidate_ready"
+		}
+		if guardrail.ReadinessScope == "" {
+			guardrail.ReadinessScope = fallback.ReadinessScope
+		}
+		return Real100Guardrail{
+			ClaimScope:               guardrail.ClaimScope,
+			ReleaseCandidateDecision: guardrail.ReleaseCandidateDecision,
+			ReadinessScope:           guardrail.ReadinessScope,
+			Real100Status:            guardrail.Real100Status,
+			Real100Blockers:          append([]string{}, guardrail.Real100Blockers...),
+			Real100Breakdown:         copyReal100Breakdown(guardrail.Real100Breakdown),
+		}
+	}
 	if guardrail.ClaimScope == "" {
 		guardrail.ClaimScope = fallback.ClaimScope
 	}

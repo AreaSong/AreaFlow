@@ -48,6 +48,22 @@ func TestBuildReleaseFinalGatePassesReadyInputs(t *testing.T) {
 	assertReleaseFinalGateItem(t, gate, "final_gate:release_exception_apply", "release_exception", "pass")
 }
 
+func TestBuildReleaseFinalGatePassesAcceptedNeedsAttention(t *testing.T) {
+	gate := BuildReleaseFinalGate(
+		ReleaseReadiness{Status: "needs_attention"},
+		ReleaseAcceptanceGate{Status: "pass", Items: []ReleaseAcceptanceGateItem{{Status: "pass", DecisionStatus: "ready"}}},
+		ReleaseExceptionApplyPreview{Status: "ready"},
+		ReleaseFinalGateOptions{},
+	)
+
+	if gate.Status != "pass" {
+		t.Fatalf("approved exceptions should close accepted needs_attention: %+v", gate)
+	}
+	if gate.Items[0].Metadata["needs_attention_accepted"] != true {
+		t.Fatalf("accepted readiness metadata missing: %+v", gate.Items[0])
+	}
+}
+
 func TestBuildReleaseFinalGateSkipsExceptionApplyWhenAcceptanceHasNoExceptions(t *testing.T) {
 	gate := BuildReleaseFinalGate(
 		ReleaseReadiness{Status: "ready"},

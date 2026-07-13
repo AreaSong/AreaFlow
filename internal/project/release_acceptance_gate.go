@@ -2,7 +2,10 @@ package project
 
 import (
 	"context"
+	"encoding/json"
 	"time"
+
+	"github.com/areasong/areaflow/internal/migrate"
 )
 
 type ReleaseAcceptanceGateOptions struct {
@@ -43,7 +46,28 @@ func (s Store) ReleaseAcceptanceGate(ctx context.Context, options ReleaseAccepta
 	if err != nil {
 		return ReleaseAcceptanceGate{}, err
 	}
-	return BuildReleaseAcceptanceGate(preview, options), nil
+	scope, err := s.resolveReleaseProjectScope(ctx, options.ProjectID, options.ProjectKey)
+	if err != nil {
+		return ReleaseAcceptanceGate{}, err
+	}
+	exceptions := []ReleaseExceptionRecord{}
+	if scope.ProjectID > 0 {
+		approval, approvalErr := migrate.Approval(ctx, s.pool, migrate.ReleaseExceptionMigrationName)
+		if approvalErr != nil {
+			return ReleaseAcceptanceGate{}, approvalErr
+		}
+		effective, effectiveErr := migrate.ApprovalEffective(migrate.ReleaseExceptionMigrationName, approval)
+		if effectiveErr != nil {
+			return ReleaseAcceptanceGate{}, effectiveErr
+		}
+		if effective && approval.Applied {
+			exceptions, err = s.EffectiveReleaseExceptions(ctx, scope.ProjectID, options.GeneratedAt)
+			if err != nil {
+				return ReleaseAcceptanceGate{}, err
+			}
+		}
+	}
+	return BuildReleaseAcceptanceGateWithExceptions(preview, options, exceptions), nil
 }
 
 func normalizeReleaseAcceptanceGateOptions(options ReleaseAcceptanceGateOptions) ReleaseAcceptanceGateOptions {
@@ -52,6 +76,10 @@ func normalizeReleaseAcceptanceGateOptions(options ReleaseAcceptanceGateOptions)
 }
 
 func BuildReleaseAcceptanceGate(preview ReleaseAcceptancePreview, options ReleaseAcceptanceGateOptions) ReleaseAcceptanceGate {
+	return BuildReleaseAcceptanceGateWithExceptions(preview, options, nil)
+}
+
+func BuildReleaseAcceptanceGateWithExceptions(preview ReleaseAcceptancePreview, options ReleaseAcceptanceGateOptions, exceptions []ReleaseExceptionRecord) ReleaseAcceptanceGate {
 	options = normalizeReleaseAcceptanceGateOptions(options)
 	scope, projectKey := releaseScopeAndProjectKey(options.ProjectID, options.ProjectKey, preview.ProjectKey, preview.Remediation.ProjectKey)
 	gate := ReleaseAcceptanceGate{
@@ -80,7 +108,7 @@ func BuildReleaseAcceptanceGate(preview ReleaseAcceptancePreview, options Releas
 		GeneratedAt: options.GeneratedAt,
 	}
 	for _, decision := range preview.Decisions {
-		gate.addItem(acceptanceGateItemForDecision(decision))
+		gate.addItem(acceptanceGateItemForDecision(decision, matchingEffectiveReleaseException(decision, exceptions)))
 	}
 	if len(gate.Items) == 0 {
 		gate.addItem(ReleaseAcceptanceGateItem{
@@ -111,7 +139,7 @@ func (g *ReleaseAcceptanceGate) addItem(item ReleaseAcceptanceGateItem) {
 	}
 }
 
-func acceptanceGateItemForDecision(decision ReleaseAcceptanceDecision) ReleaseAcceptanceGateItem {
+func acceptanceGateItemForDecision(decision ReleaseAcceptanceDecision, exception *ReleaseExceptionRecord) ReleaseAcceptanceGateItem {
 	metadata := copyReleaseMetadata(decision.Metadata)
 	metadata["decision_status"] = decision.Status
 	metadata["source_action"] = decision.SourceAction
@@ -130,6 +158,24 @@ func acceptanceGateItemForDecision(decision ReleaseAcceptanceDecision) ReleaseAc
 			Metadata:         metadata,
 		}
 	case "needs_decision":
+		if exception != nil {
+			metadata["approved_exception_key"] = exception.ExceptionKey
+			metadata["approved_exception_id"] = exception.ID
+			metadata["approved_exception_expires_at"] = exception.ExpiresAt
+			metadata["source_decision_status"] = decision.Status
+			return ReleaseAcceptanceGateItem{
+				Key:              "gate:" + decision.Key,
+				Category:         decision.Category,
+				Status:           "pass",
+				DecisionStatus:   "ready",
+				AcceptanceType:   decision.AcceptanceType,
+				Message:          "release acceptance decision is covered by an effective approved exception",
+				Owner:            exception.Owner,
+				RequiredEvidence: []string{"approved release exception remains effective and matches the current gate item"},
+				NextCommand:      "areaflow release acceptance-gate --json",
+				Metadata:         metadata,
+			}
+		}
 		return ReleaseAcceptanceGateItem{
 			Key:              "gate:" + decision.Key,
 			Category:         decision.Category,
@@ -169,4 +215,26 @@ func acceptanceGateItemForDecision(decision ReleaseAcceptanceDecision) ReleaseAc
 			Metadata:         metadata,
 		}
 	}
+}
+
+func matchingEffectiveReleaseException(decision ReleaseAcceptanceDecision, exceptions []ReleaseExceptionRecord) *ReleaseExceptionRecord {
+	gateItem := "gate:" + decision.Key
+	expectedFingerprint := releaseExceptionSourceFingerprint(gateItem, decision.Category, decision.AcceptanceType, decision.Owner, decision.RequiredEvidence)
+	for i := range exceptions {
+		exception := &exceptions[i]
+		fingerprint, _ := exception.Metadata["source_fingerprint"].(string)
+		if exception.Status == "approved" && exception.SourceGateItem == gateItem &&
+			exception.AcceptanceType == decision.AcceptanceType && fingerprint == expectedFingerprint {
+			return exception
+		}
+	}
+	return nil
+}
+
+func releaseExceptionSourceFingerprint(gateItem string, category string, acceptanceType string, owner string, requiredEvidence []string) string {
+	payload, _ := json.Marshal(map[string]any{
+		"gate_item": gateItem, "category": category, "acceptance_type": acceptanceType,
+		"owner": owner, "required_evidence": requiredEvidence,
+	})
+	return releaseExceptionSHA256Hex(payload)
 }

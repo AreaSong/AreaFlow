@@ -64,6 +64,23 @@ func TestBuildReleaseEvidenceBundleReadyWhenInputsReady(t *testing.T) {
 	assertReleaseEvidenceBundleItem(t, bundle, "evidence:audit_coverage", "audit", "ready")
 }
 
+func TestBuildReleaseEvidenceBundleAcceptsWarnAuditCoveredByFinalGate(t *testing.T) {
+	bundle := BuildReleaseEvidenceBundle(
+		ReleaseFinalGate{Status: "pass"},
+		BackupManifest{Status: "ready", ManifestHash: "abc123"},
+		AuditCoverage{Status: "warn", GapRequirements: 4},
+		ReleaseEvidenceBundleOptions{},
+	)
+
+	if bundle.Status != "ready" {
+		t.Fatalf("expected final-gate-covered audit warning to be ready: %+v", bundle)
+	}
+	item := releaseEvidenceBundleItem(t, bundle, "evidence:audit_coverage")
+	if item.Status != "ready" || item.Metadata["covered_by_final_gate"] != true || item.Metadata["audit_status"] != "warn" {
+		t.Fatalf("unexpected audit evidence item: %+v", item)
+	}
+}
+
 func TestReleaseEvidenceBundleHashIgnoresMutableEvidenceCounts(t *testing.T) {
 	created := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
 	areaMatrixRecord := Record{

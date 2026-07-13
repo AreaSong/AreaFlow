@@ -2330,8 +2330,17 @@ func completionAuditSnapshotReadinessReal100Guardrail(readiness CompletionAuditS
 	}
 	if !closure.ReadyForReleaseCandidateClosure {
 		blockers = append(blockers, "release_candidate_snapshot_not_ready")
+	} else {
+		blockers = removeString(blockers, "release_candidate_snapshot_not_ready")
 	}
 	guardrail.Real100Blockers = real100OrderCompletionBlockers(uniqueStrings(blockers))
+	if len(guardrail.Real100Blockers) == 0 {
+		guardrail.NotReal100 = false
+		guardrail.EvidenceOnly = false
+		guardrail.StatusAloneIsNotCompletion = false
+		guardrail.ReleaseCandidateDecision = "release_candidate_ready"
+		guardrail.Real100Status = Real100StatusComplete
+	}
 	return guardrail
 }
 

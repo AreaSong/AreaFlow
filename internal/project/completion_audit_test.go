@@ -1882,6 +1882,30 @@ func TestBuildCompletionAuditSnapshotReadinessReal100UsesCurrentPackageAClosure(
 	}
 }
 
+func TestCompletionAuditSnapshotReadinessReal100CompletesWhenSnapshotIsReady(t *testing.T) {
+	readiness := CompletionAuditSnapshotReadiness{
+		Status:        "ready",
+		HasSnapshot:   true,
+		RequiredClass: "release_candidate",
+		Latest: CompletionAuditSnapshot{
+			EvidenceClass:         "release_candidate",
+			ReleaseCandidateLabel: "v1.0-rc1",
+			EvidenceURI:           "docs/development/real-release-candidate-evidence.md#release-candidate-closure",
+			AuditHash:             "audit-hash",
+			EventID:               42,
+		},
+	}
+	current := CompletionAuditReal100Guardrail()
+	current.Real100Blockers = []string{"release_candidate_snapshot_not_ready"}
+
+	guardrail := completionAuditSnapshotReadinessReal100Guardrail(readiness, current)
+	if guardrail.Real100Status != Real100StatusComplete || len(guardrail.Real100Blockers) != 0 ||
+		guardrail.NotReal100 || guardrail.EvidenceOnly || guardrail.StatusAloneIsNotCompletion ||
+		guardrail.ReleaseCandidateDecision != "release_candidate_ready" {
+		t.Fatalf("ready release candidate should complete real 100 guardrail: %+v", guardrail)
+	}
+}
+
 func TestBuildCompletionAuditSnapshotReadinessRejectsCompletionAuditHashMismatch(t *testing.T) {
 	record := realAreaMatrixRecord()
 	bundle := readyReleaseEvidenceBundle()

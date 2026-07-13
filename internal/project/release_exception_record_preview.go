@@ -121,6 +121,7 @@ func releaseExceptionDraftForGateItem(item ReleaseAcceptanceGateItem) ReleaseExc
 	metadata["gate_item_status"] = item.Status
 	metadata["decision_status"] = item.DecisionStatus
 	metadata["exception_writable"] = false
+	metadata["source_fingerprint"] = releaseExceptionSourceFingerprint(item.Key, item.Category, item.AcceptanceType, item.Owner, item.RequiredEvidence)
 	key := "release_exception:" + strings.TrimPrefix(item.Key, "gate:accept:")
 	switch item.DecisionStatus {
 	case "needs_decision":

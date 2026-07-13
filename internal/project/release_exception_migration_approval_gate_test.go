@@ -3,6 +3,8 @@ package project
 import (
 	"testing"
 	"time"
+
+	"github.com/areasong/areaflow/internal/migrate"
 )
 
 func TestBuildReleaseExceptionMigrationApprovalGateBlocksWithoutApproval(t *testing.T) {
@@ -48,6 +50,37 @@ func TestBuildReleaseExceptionMigrationApprovalGateBlocksWithoutApproval(t *test
 	}
 	if !gate.GeneratedAt.Equal(created) {
 		t.Fatalf("generated_at = %s, want %s", gate.GeneratedAt, created)
+	}
+}
+
+func TestBuildReleaseExceptionMigrationApprovalGatePassesEffectiveApproval(t *testing.T) {
+	hash, err := migrate.ExpectedHash(migrate.ReleaseExceptionMigrationName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := BuildReleaseExceptionMigrationApprovalGateWithState(
+		ReleaseExceptionSchemaPreview{Status: "needs_approval"},
+		ReleaseExceptionMigrationApprovalGateOptions{},
+		migrate.ApprovalState{Status: "approved", MigrationHash: hash, Actor: "release-owner", Applied: true},
+	)
+
+	if gate.Status != "pass" || len(gate.Items) != 1 || gate.Items[0].ApprovalStatus != "approved" {
+		t.Fatalf("effective approval should pass migration gate: %+v", gate)
+	}
+	if gate.Items[0].Metadata["migration_applied"] != true {
+		t.Fatalf("migration applied state missing: %+v", gate.Items[0].Metadata)
+	}
+}
+
+func TestBuildReleaseExceptionMigrationApprovalGateBlocksRevokedApproval(t *testing.T) {
+	gate := BuildReleaseExceptionMigrationApprovalGateWithState(
+		ReleaseExceptionSchemaPreview{Status: "needs_approval"},
+		ReleaseExceptionMigrationApprovalGateOptions{},
+		migrate.ApprovalState{Status: "revoked", MigrationHash: "hash"},
+	)
+
+	if gate.Status != "blocked" || gate.Items[0].ApprovalStatus != "revoked" {
+		t.Fatalf("revoked approval should block migration gate: %+v", gate)
 	}
 }
 

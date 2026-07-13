@@ -71,6 +71,82 @@ func TestExecutionForwardingV1ReadinessReportsMissingEvidence(t *testing.T) {
 	}
 }
 
+func TestExecutionForwardingV1ReadinessPromotesShimAfterSafeApplyRecord(t *testing.T) {
+	record := Record{ID: 1, Key: "areamatrix"}
+	shim := ShimReadiness{
+		Project: record,
+		Status:  "blocked",
+		Items: []ShimReadinessItem{
+			{Key: "compatibility_contract", Status: "pass"},
+			{Key: "explicit_edit_approval", Status: "blocked"},
+		},
+	}
+	event := EventRecord{
+		ID:        1986,
+		ProjectID: record.ID,
+		Type:      shimApplyCommandEventType,
+		Metadata: map[string]any{
+			"status":                     "recorded",
+			"decision":                   "allowed",
+			"gate_status":                "pass",
+			"gate_decision":              "go",
+			"apply_command_eligible":     true,
+			"command_request_created":    true,
+			"project_write_attempted":    false,
+			"execution_write_attempted":  false,
+			"engine_call_attempted":      false,
+			"task_loop_run_forwarded":    false,
+			"status_projection_written":  false,
+			"area_matrix_files_modified": false,
+			"idempotency_key":            "package-b-closure",
+		},
+	}
+
+	if !shimApplyEventCompletesForwardingReadiness(event) {
+		t.Fatalf("safe shim apply event should complete forwarding shim readiness: %+v", event)
+	}
+	updated := executionForwardingShimReadinessAfterApply(shim, event)
+	readiness := ExecutionForwardingV1ReadinessFromParts(updated.Project, updated, map[string]int{})
+
+	assertExecutionForwardingV1Item(t, readiness, "read_only_shim", "pass")
+	if updated.Status != "pass" {
+		t.Fatalf("updated shim readiness status = %q, want pass", updated.Status)
+	}
+	approval := executionForwardingShimReadinessItem(updated, "explicit_edit_approval")
+	if approval.Status != "pass" || approval.Metadata["shim_apply_event_id"] != int64(1986) {
+		t.Fatalf("approval item was not bound to shim apply event: %+v", approval)
+	}
+}
+
+func TestExecutionForwardingV1ReadinessRejectsUnsafeShimApplyRecord(t *testing.T) {
+	event := EventRecord{
+		ID:   1986,
+		Type: shimApplyCommandEventType,
+		Metadata: map[string]any{
+			"status":                     "recorded",
+			"decision":                   "allowed",
+			"gate_status":                "pass",
+			"gate_decision":              "go",
+			"apply_command_eligible":     true,
+			"command_request_created":    true,
+			"area_matrix_files_modified": true,
+		},
+	}
+
+	if shimApplyEventCompletesForwardingReadiness(event) {
+		t.Fatalf("unsafe shim apply event must not complete forwarding readiness: %+v", event)
+	}
+}
+
+func executionForwardingShimReadinessItem(readiness ShimReadiness, key string) ShimReadinessItem {
+	for _, item := range readiness.Items {
+		if item.Key == key {
+			return item
+		}
+	}
+	return ShimReadinessItem{}
+}
+
 func TestExecutionForwardingV1ReadinessConsumesCleanProtectedPathProof(t *testing.T) {
 	record := Record{ID: 1, Key: "areamatrix"}
 	proof := buildProtectedPathProof(record, normalizeRecordProtectedPathProofOptions(RecordProtectedPathProofOptions{

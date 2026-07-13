@@ -123,6 +123,16 @@ func TestHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "areaflow release exception-migration-approval-gate") {
 		t.Fatalf("help output did not include release exception migration approval gate command: %s", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "areaflow release exception-migration-approve") ||
+		!strings.Contains(stdout.String(), "areaflow release exception-migration-apply") ||
+		!strings.Contains(stdout.String(), "areaflow release exception-migration-revoke") {
+		t.Fatalf("help output did not include release exception migration lifecycle commands: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "areaflow release exception-request") ||
+		!strings.Contains(stdout.String(), "areaflow release exception-approve") ||
+		!strings.Contains(stdout.String(), "areaflow release exception-revoke") {
+		t.Fatalf("help output did not include release exception record lifecycle commands: %s", stdout.String())
+	}
 	if !strings.Contains(stdout.String(), "areaflow release exception-apply-preview") {
 		t.Fatalf("help output did not include release exception apply preview command: %s", stdout.String())
 	}
@@ -278,6 +288,41 @@ func TestHelp(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "areaflow worker register") {
 		t.Fatalf("help output did not include worker command: %s", stdout.String())
+	}
+}
+
+func TestReleaseExceptionCommandFlagsFromArgs(t *testing.T) {
+	flags, err := releaseExceptionCommandFlagsFromArgs([]string{
+		"--project", "areamatrix", "--exception-key", "release_exception:restore_plan",
+		"--actor", "release-owner", "--reason", "evidence reviewed",
+		"--expires-at", "2026-08-01T00:00:00Z", "--json",
+	}, "areaflow release exception-request", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flags.projectKey != "areamatrix" || flags.exceptionKey != "release_exception:restore_plan" || !flags.json || flags.expiresAt == nil {
+		t.Fatalf("unexpected release exception flags: %+v", flags)
+	}
+}
+
+func TestReleaseExceptionDecisionFlagsRejectRequestOnlyFields(t *testing.T) {
+	_, err := releaseExceptionCommandFlagsFromArgs([]string{
+		"--project", "areamatrix", "--exception-key", "release_exception:restore_plan",
+		"--actor", "release-owner", "--reason", "reviewed", "--owner", "archive-owner",
+	}, "areaflow release exception-approve", false)
+	if err == nil {
+		t.Fatal("decision command should reject request-only fields")
+	}
+}
+
+func TestReleaseExceptionRecordToJSON(t *testing.T) {
+	created := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	record := releaseExceptionRecordToJSON(project.ReleaseExceptionRecord{
+		ID: 7, ProjectKey: "areamatrix", ExceptionKey: "release_exception:restore_plan",
+		Status: "approved", CreatedAt: created, UpdatedAt: created, ApprovedAt: &created,
+	})
+	if record.ID != 7 || record.Status != "approved" || record.ApprovedAt != "2026-07-13T12:00:00Z" {
+		t.Fatalf("unexpected release exception json: %+v", record)
 	}
 }
 

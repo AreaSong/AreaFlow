@@ -95,7 +95,7 @@ func BuildReleaseFinalGate(readiness ReleaseReadiness, acceptanceGate ReleaseAcc
 		},
 		GeneratedAt: options.GeneratedAt,
 	}
-	gate.addItem(releaseFinalReadinessItem(readiness))
+	gate.addItem(releaseFinalReadinessItem(readiness, acceptanceGate))
 	gate.addItem(releaseFinalAcceptanceItem(acceptanceGate))
 	gate.addItem(releaseFinalExceptionApplyItem(acceptanceGate, exceptionApply))
 	return gate
@@ -111,11 +111,12 @@ func (g *ReleaseFinalGate) addItem(item ReleaseFinalGateItem) {
 	}
 }
 
-func releaseFinalReadinessItem(readiness ReleaseReadiness) ReleaseFinalGateItem {
+func releaseFinalReadinessItem(readiness ReleaseReadiness, acceptanceGate ReleaseAcceptanceGate) ReleaseFinalGateItem {
 	status := "pass"
 	message := "release readiness is ready"
 	requiredEvidence := []string{"release readiness status remains ready"}
-	if readiness.Status != "ready" {
+	acceptedNeedsAttention := readiness.Status == "needs_attention" && acceptanceGate.Status == "pass"
+	if readiness.Status != "ready" && !acceptedNeedsAttention {
 		status = "blocked"
 		message = "release readiness is not ready"
 		requiredEvidence = []string{"areaflow release readiness --json returns status ready"}
@@ -129,9 +130,10 @@ func releaseFinalReadinessItem(readiness ReleaseReadiness) ReleaseFinalGateItem 
 		RequiredEvidence: requiredEvidence,
 		NextCommand:      "areaflow release readiness --json",
 		Metadata: map[string]any{
-			"readiness_status": readiness.Status,
-			"item_count":       len(readiness.Items),
-			"project_count":    len(readiness.Projects),
+			"readiness_status":         readiness.Status,
+			"needs_attention_accepted": acceptedNeedsAttention,
+			"item_count":               len(readiness.Items),
+			"project_count":            len(readiness.Projects),
 		},
 	}
 }

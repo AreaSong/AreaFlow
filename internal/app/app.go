@@ -826,6 +826,54 @@ type backupScopeFlags struct {
 	projectKey string
 }
 
+type releaseExceptionMigrationFlags struct {
+	json   bool
+	actor  string
+	reason string
+}
+
+type releaseExceptionCommandFlags struct {
+	json           bool
+	projectKey     string
+	exceptionKey   string
+	actor          string
+	reason         string
+	owner          string
+	reviewAt       *time.Time
+	expiresAt      *time.Time
+	idempotencyKey string
+}
+
+type releaseExceptionRecordJSON struct {
+	ID               int64          `json:"id"`
+	ProjectID        int64          `json:"project_id"`
+	ProjectKey       string         `json:"project_key"`
+	ExceptionKey     string         `json:"exception_key"`
+	SourceGateItem   string         `json:"source_gate_item"`
+	SourceDecision   string         `json:"source_decision"`
+	AcceptanceType   string         `json:"acceptance_type"`
+	Status           string         `json:"status"`
+	Owner            string         `json:"owner"`
+	Reason           string         `json:"reason"`
+	RequiredEvidence []string       `json:"required_evidence"`
+	RollbackPlan     string         `json:"rollback_plan"`
+	ReviewRequired   bool           `json:"review_required"`
+	ReviewAt         string         `json:"review_at,omitempty"`
+	ExpiresAt        string         `json:"expires_at,omitempty"`
+	RequestedBy      string         `json:"requested_by"`
+	ApprovedBy       string         `json:"approved_by,omitempty"`
+	RevokedBy        string         `json:"revoked_by,omitempty"`
+	DecisionReason   string         `json:"decision_reason,omitempty"`
+	AuditEventID     int64          `json:"audit_event_id"`
+	Metadata         map[string]any `json:"metadata"`
+	CreatedAt        string         `json:"created_at"`
+	UpdatedAt        string         `json:"updated_at"`
+	ApprovedAt       string         `json:"approved_at,omitempty"`
+	RevokedAt        string         `json:"revoked_at,omitempty"`
+	IdempotencyKey   string         `json:"idempotency_key"`
+	Created          bool           `json:"created"`
+}
+
 type restorePlanItemJSON struct {
 	Key      string         `json:"key"`
 	Category string         `json:"category"`
@@ -3628,6 +3676,12 @@ Usage:
   areaflow release exception-migration-approval-gate
   areaflow release exception-migration-approval-gate --project areamatrix
   areaflow release exception-migration-approval-gate --json
+  areaflow release exception-migration-approve --actor release-owner --reason "approve reviewed 000012 migration"
+  areaflow release exception-migration-apply
+  areaflow release exception-migration-revoke --actor release-owner --reason "disable release exception writes"
+  areaflow release exception-request --project areamatrix --exception-key release_exception:restore_plan --actor release-owner --reason "accept metadata-only history"
+  areaflow release exception-approve --project areamatrix --exception-key release_exception:restore_plan --actor release-owner --reason "evidence reviewed"
+  areaflow release exception-revoke --project areamatrix --exception-key release_exception:restore_plan --actor release-owner --reason "risk acceptance withdrawn"
   areaflow release exception-apply-preview
   areaflow release exception-apply-preview --project areamatrix
   areaflow release exception-apply-preview --json
@@ -6272,6 +6326,87 @@ func (c command) runRelease(ctx context.Context, args []string) error {
 			return c.printJSON(releaseExceptionMigrationApprovalGateToJSON(gate))
 		}
 		c.printReleaseExceptionMigrationApprovalGate(gate)
+		return nil
+	case "exception-migration-approve", "exception-migration-revoke":
+		flags, err := releaseExceptionMigrationFlagsFromArgs(args[1:], "areaflow release "+args[0])
+		if err != nil {
+			return err
+		}
+		cfg := config.FromEnv()
+		pool, err := db.Open(ctx, cfg.Database)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		var state migrate.ApprovalState
+		if args[0] == "exception-migration-approve" {
+			state, err = migrate.Approve(ctx, pool, migrate.ReleaseExceptionMigrationName, flags.actor, flags.reason)
+		} else {
+			state, err = migrate.Revoke(ctx, pool, migrate.ReleaseExceptionMigrationName, flags.actor, flags.reason)
+		}
+		if err != nil {
+			return err
+		}
+		if flags.json {
+			return c.printJSON(map[string]any{"migration": migrate.ReleaseExceptionMigrationName, "status": state.Status, "migration_hash": state.MigrationHash, "actor": state.Actor, "reason": state.Reason, "applied": state.Applied})
+		}
+		fmt.Fprintf(c.stdout, "release exception migration approval: migration=%s status=%s applied=%t actor=%s\n", migrate.ReleaseExceptionMigrationName, state.Status, state.Applied, state.Actor)
+		return nil
+	case "exception-migration-apply":
+		jsonOutput, err := outputJSON(args[1:])
+		if err != nil {
+			return err
+		}
+		cfg := config.FromEnv()
+		pool, err := db.Open(ctx, cfg.Database)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		applied, err := migrate.ApplyApproved(ctx, pool, migrate.ReleaseExceptionMigrationName)
+		if err != nil {
+			return err
+		}
+		if jsonOutput {
+			return c.printJSON(map[string]any{"migration": migrate.ReleaseExceptionMigrationName, "applied": applied})
+		}
+		fmt.Fprintf(c.stdout, "release exception migration: migration=%s applied=%t\n", migrate.ReleaseExceptionMigrationName, applied)
+		return nil
+	case "exception-request", "exception-approve", "exception-revoke":
+		flags, err := releaseExceptionCommandFlagsFromArgs(args[1:], "areaflow release "+args[0], args[0] == "exception-request")
+		if err != nil {
+			return err
+		}
+		cfg := config.FromEnv()
+		pool, err := db.Open(ctx, cfg.Database)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		store := project.NewStore(pool)
+		record, err := store.GetByKey(ctx, flags.projectKey)
+		if err != nil {
+			return err
+		}
+		var exception project.ReleaseExceptionRecord
+		switch args[0] {
+		case "exception-request":
+			exception, err = store.RequestReleaseException(ctx, record, project.RequestReleaseExceptionOptions{
+				ExceptionKey: flags.exceptionKey, Actor: flags.actor, Reason: flags.reason, Owner: flags.owner,
+				ReviewAt: flags.reviewAt, ExpiresAt: flags.expiresAt, IdempotencyKey: flags.idempotencyKey,
+			})
+		case "exception-approve":
+			exception, err = store.ApproveReleaseException(ctx, record, project.DecideReleaseExceptionOptions{ExceptionKey: flags.exceptionKey, Actor: flags.actor, Reason: flags.reason, IdempotencyKey: flags.idempotencyKey})
+		case "exception-revoke":
+			exception, err = store.RevokeReleaseException(ctx, record, project.DecideReleaseExceptionOptions{ExceptionKey: flags.exceptionKey, Actor: flags.actor, Reason: flags.reason, IdempotencyKey: flags.idempotencyKey})
+		}
+		if err != nil {
+			return err
+		}
+		if flags.json {
+			return c.printJSON(releaseExceptionRecordToJSON(exception))
+		}
+		fmt.Fprintf(c.stdout, "release exception: project=%s key=%s status=%s audit_event_id=%d created=%t\n", exception.ProjectKey, exception.ExceptionKey, exception.Status, exception.AuditEventID, exception.Created)
 		return nil
 	case "exception-apply-preview":
 		flags, err := releaseScopeFlagsFromArgs(args[1:], "areaflow release exception-apply-preview")
@@ -9194,6 +9329,83 @@ func restorePlanFlagsFromArgs(args []string) (bool, string, error) {
 
 func releaseScopeFlagsFromArgs(args []string, commandName string) (backupScopeFlags, error) {
 	return backupScopeFlagsFromArgs(args, commandName)
+}
+
+func releaseExceptionMigrationFlagsFromArgs(args []string, commandName string) (releaseExceptionMigrationFlags, error) {
+	flags := releaseExceptionMigrationFlags{}
+	usage := fmt.Sprintf("usage: %s --actor ACTOR --reason TEXT [--json]", commandName)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			flags.json = true
+		case "--actor", "--reason":
+			if i+1 >= len(args) {
+				return releaseExceptionMigrationFlags{}, fmt.Errorf("%s", usage)
+			}
+			if args[i] == "--actor" {
+				flags.actor = strings.TrimSpace(args[i+1])
+			} else {
+				flags.reason = strings.TrimSpace(args[i+1])
+			}
+			i++
+		default:
+			return releaseExceptionMigrationFlags{}, fmt.Errorf("%s", usage)
+		}
+	}
+	if flags.actor == "" || flags.reason == "" {
+		return releaseExceptionMigrationFlags{}, fmt.Errorf("%s", usage)
+	}
+	return flags, nil
+}
+
+func releaseExceptionCommandFlagsFromArgs(args []string, commandName string, request bool) (releaseExceptionCommandFlags, error) {
+	flags := releaseExceptionCommandFlags{}
+	usage := fmt.Sprintf("usage: %s --project KEY --exception-key KEY --actor ACTOR --reason TEXT [--owner OWNER] [--review-at RFC3339] [--expires-at RFC3339] [--idempotency-key KEY] [--json]", commandName)
+	for i := 0; i < len(args); i++ {
+		name := args[i]
+		if name == "--json" {
+			flags.json = true
+			continue
+		}
+		if i+1 >= len(args) {
+			return releaseExceptionCommandFlags{}, fmt.Errorf("%s", usage)
+		}
+		value := strings.TrimSpace(args[i+1])
+		i++
+		switch name {
+		case "--project":
+			flags.projectKey = value
+		case "--exception-key":
+			flags.exceptionKey = value
+		case "--actor":
+			flags.actor = value
+		case "--reason":
+			flags.reason = value
+		case "--owner":
+			flags.owner = value
+		case "--idempotency-key":
+			flags.idempotencyKey = value
+		case "--review-at", "--expires-at":
+			parsed, err := time.Parse(time.RFC3339, value)
+			if err != nil {
+				return releaseExceptionCommandFlags{}, fmt.Errorf("%s: invalid %s: %w", usage, name, err)
+			}
+			if name == "--review-at" {
+				flags.reviewAt = &parsed
+			} else {
+				flags.expiresAt = &parsed
+			}
+		default:
+			return releaseExceptionCommandFlags{}, fmt.Errorf("%s", usage)
+		}
+	}
+	if flags.projectKey == "" || flags.exceptionKey == "" || flags.actor == "" || flags.reason == "" {
+		return releaseExceptionCommandFlags{}, fmt.Errorf("%s", usage)
+	}
+	if !request && (flags.owner != "" || flags.reviewAt != nil || flags.expiresAt != nil) {
+		return releaseExceptionCommandFlags{}, fmt.Errorf("%s", usage)
+	}
+	return flags, nil
 }
 
 func executionForwardingV1CommandPreviewFlagsFromArgs(args []string) (executionForwardingV1CommandPreviewFlags, error) {
@@ -15495,6 +15707,47 @@ func releaseExceptionRecordPreviewToJSON(preview project.ReleaseExceptionRecordP
 			ReviewRequired:   draft.ReviewRequired,
 			Metadata:         draft.Metadata,
 		})
+	}
+	return out
+}
+
+func releaseExceptionRecordToJSON(record project.ReleaseExceptionRecord) releaseExceptionRecordJSON {
+	out := releaseExceptionRecordJSON{
+		ID:               record.ID,
+		ProjectID:        record.ProjectID,
+		ProjectKey:       record.ProjectKey,
+		ExceptionKey:     record.ExceptionKey,
+		SourceGateItem:   record.SourceGateItem,
+		SourceDecision:   record.SourceDecision,
+		AcceptanceType:   record.AcceptanceType,
+		Status:           record.Status,
+		Owner:            record.Owner,
+		Reason:           record.Reason,
+		RequiredEvidence: record.RequiredEvidence,
+		RollbackPlan:     record.RollbackPlan,
+		ReviewRequired:   record.ReviewRequired,
+		RequestedBy:      record.RequestedBy,
+		ApprovedBy:       record.ApprovedBy,
+		RevokedBy:        record.RevokedBy,
+		DecisionReason:   record.DecisionReason,
+		AuditEventID:     record.AuditEventID,
+		Metadata:         record.Metadata,
+		CreatedAt:        record.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        record.UpdatedAt.UTC().Format(time.RFC3339),
+		IdempotencyKey:   record.IdempotencyKey,
+		Created:          record.Created,
+	}
+	if record.ReviewAt != nil {
+		out.ReviewAt = record.ReviewAt.UTC().Format(time.RFC3339)
+	}
+	if record.ExpiresAt != nil {
+		out.ExpiresAt = record.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if record.ApprovedAt != nil {
+		out.ApprovedAt = record.ApprovedAt.UTC().Format(time.RFC3339)
+	}
+	if record.RevokedAt != nil {
+		out.RevokedAt = record.RevokedAt.UTC().Format(time.RFC3339)
 	}
 	return out
 }

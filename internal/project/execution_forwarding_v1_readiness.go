@@ -63,6 +63,13 @@ func (s Store) ExecutionForwardingV1Readiness(ctx context.Context, record Record
 	if err != nil {
 		return ExecutionForwardingV1Readiness{}, err
 	}
+	shimApplyEvent, shimApplyRecorded, err := s.LatestEventByType(ctx, record.ID, shimApplyCommandEventType)
+	if err != nil {
+		return ExecutionForwardingV1Readiness{}, err
+	}
+	if shimApplyRecorded && shimApplyEventCompletesForwardingReadiness(shimApplyEvent) {
+		shim = executionForwardingShimReadinessAfterApply(shim, shimApplyEvent)
+	}
 	commandEvidence, err := s.completedCommandEvidenceCounts(ctx, record.ID)
 	if err != nil {
 		return ExecutionForwardingV1Readiness{}, err
@@ -76,6 +83,46 @@ func (s Store) ExecutionForwardingV1Readiness(ctx context.Context, record Record
 		return ExecutionForwardingV1Readiness{}, err
 	}
 	return ExecutionForwardingV1ReadinessFromPartsWithProofs(record, shim, commandEvidence, protectedPathProof, rollbackProof), nil
+}
+
+func shimApplyEventCompletesForwardingReadiness(event EventRecord) bool {
+	return event.ID > 0 &&
+		event.Type == shimApplyCommandEventType &&
+		metadataString(event.Metadata, "status") == "recorded" &&
+		metadataString(event.Metadata, "decision") == "allowed" &&
+		metadataString(event.Metadata, "gate_status") == "pass" &&
+		metadataString(event.Metadata, "gate_decision") == "go" &&
+		metadataBool(event.Metadata, "apply_command_eligible") &&
+		metadataBool(event.Metadata, "command_request_created") &&
+		!metadataBool(event.Metadata, "project_write_attempted") &&
+		!metadataBool(event.Metadata, "execution_write_attempted") &&
+		!metadataBool(event.Metadata, "engine_call_attempted") &&
+		!metadataBool(event.Metadata, "task_loop_run_forwarded") &&
+		!metadataBool(event.Metadata, "status_projection_written") &&
+		!metadataBool(event.Metadata, "area_matrix_files_modified")
+}
+
+func executionForwardingShimReadinessAfterApply(shim ShimReadiness, event EventRecord) ShimReadiness {
+	updated := ShimReadiness{
+		Project: shim.Project,
+		Status:  "pass",
+		Preview: shim.Preview,
+		Items:   make([]ShimReadinessItem, 0, len(shim.Items)),
+	}
+	for _, item := range shim.Items {
+		if item.Key == "explicit_edit_approval" {
+			metadata := map[string]any{
+				"shim_apply_event_id":         event.ID,
+				"shim_apply_command_recorded": true,
+				"idempotency_key":             metadataString(event.Metadata, "idempotency_key"),
+			}
+			item.Status = "pass"
+			item.Message = "explicit shim approval and protected apply command have been recorded"
+			item.Metadata = metadata
+		}
+		updated.addItem(item)
+	}
+	return updated
 }
 
 func ExecutionForwardingV1ReadinessFromParts(record Record, shim ShimReadiness, commandEvidence map[string]int) ExecutionForwardingV1Readiness {

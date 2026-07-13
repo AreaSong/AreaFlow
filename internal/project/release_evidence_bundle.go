@@ -106,7 +106,7 @@ func BuildReleaseEvidenceBundle(finalGate ReleaseFinalGate, backup BackupManifes
 	}
 	bundle.addItem(releaseEvidenceFinalGateItem(finalGate))
 	bundle.addItem(releaseEvidenceBackupItem(backup))
-	bundle.addItem(releaseEvidenceAuditItem(auditCoverage))
+	bundle.addItem(releaseEvidenceAuditItem(auditCoverage, finalGate))
 	for _, project := range backup.Projects {
 		bundle.addItem(releaseEvidenceProjectInventoryItem(project))
 	}
@@ -205,13 +205,17 @@ func releaseEvidenceBackupItem(backup BackupManifest) ReleaseEvidenceBundleItem 
 	}
 }
 
-func releaseEvidenceAuditItem(auditCoverage AuditCoverage) ReleaseEvidenceBundleItem {
+func releaseEvidenceAuditItem(auditCoverage AuditCoverage, finalGate ReleaseFinalGate) ReleaseEvidenceBundleItem {
 	status := "ready"
 	if auditCoverage.Status == "warn" {
 		status = "needs_attention"
 	}
 	if auditCoverage.Status == "fail" {
 		status = "blocked"
+	}
+	coveredByFinalGate := auditCoverage.Status == "warn" && finalGate.Status == "pass"
+	if coveredByFinalGate {
+		status = "ready"
 	}
 	return ReleaseEvidenceBundleItem{
 		Key:         "evidence:audit_coverage",
@@ -220,11 +224,12 @@ func releaseEvidenceAuditItem(auditCoverage AuditCoverage) ReleaseEvidenceBundle
 		Source:      "audit coverage",
 		Description: "audit evidence coverage matrix",
 		Metadata: map[string]any{
-			"audit_status":         auditCoverage.Status,
-			"scope":                auditCoverage.Scope,
-			"covered_requirements": auditCoverage.CoveredRequirements,
-			"gap_requirements":     auditCoverage.GapRequirements,
-			"total_audit_events":   auditCoverage.TotalAuditEvents,
+			"audit_status":          auditCoverage.Status,
+			"covered_by_final_gate": coveredByFinalGate,
+			"scope":                 auditCoverage.Scope,
+			"covered_requirements":  auditCoverage.CoveredRequirements,
+			"gap_requirements":      auditCoverage.GapRequirements,
+			"total_audit_events":    auditCoverage.TotalAuditEvents,
 		},
 	}
 }

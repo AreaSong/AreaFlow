@@ -12,8 +12,8 @@ func TestList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list migrations: %v", err)
 	}
-	if len(migrations) != 11 {
-		t.Fatalf("migration count = %d, want 11", len(migrations))
+	if len(migrations) != 12 {
+		t.Fatalf("migration count = %d, want 12", len(migrations))
 	}
 	if migrations[0].Name != "000001_v0_1_core.sql" {
 		t.Fatalf("migration name = %q", migrations[0].Name)
@@ -48,10 +48,42 @@ func TestList(t *testing.T) {
 	if migrations[10].Name != "000011_v1_migration_ledger.sql" {
 		t.Fatalf("migration name = %q", migrations[10].Name)
 	}
+	if migrations[11].Name != ReleaseExceptionMigrationName {
+		t.Fatalf("migration name = %q", migrations[11].Name)
+	}
 	for _, migration := range migrations {
 		if migration.SQL == "" {
 			t.Fatalf("migration %s SQL is empty", migration.Name)
 		}
+	}
+}
+
+func TestReleaseExceptionMigrationContainsLifecycleSchema(t *testing.T) {
+	migration, err := migrationByName(ReleaseExceptionMigrationName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{
+		"CREATE TABLE IF NOT EXISTS release_exceptions",
+		"UNIQUE (project_id, exception_key)",
+		"status IN ('requested', 'approved', 'rejected', 'revoked', 'expired')",
+		"release_exceptions_project_status_idx",
+	} {
+		if !strings.Contains(migration.SQL, fragment) {
+			t.Fatalf("release exception migration missing %q", fragment)
+		}
+	}
+}
+
+func TestApprovalAllowsMigrationRequiresApprovedMatchingHash(t *testing.T) {
+	if !approvalAllowsMigration(ApprovalState{Status: "approved", MigrationHash: "hash"}, "hash") {
+		t.Fatal("matching approved migration should be allowed")
+	}
+	if approvalAllowsMigration(ApprovalState{Status: "revoked", MigrationHash: "hash"}, "hash") {
+		t.Fatal("revoked migration approval must be denied")
+	}
+	if approvalAllowsMigration(ApprovalState{Status: "approved", MigrationHash: "stale"}, "hash") {
+		t.Fatal("stale migration hash must be denied")
 	}
 }
 

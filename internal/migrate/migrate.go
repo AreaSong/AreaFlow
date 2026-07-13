@@ -28,6 +28,17 @@ type Status struct {
 	Applied bool
 }
 
+const ReleaseExceptionMigrationName = "000012_v1_release_exceptions.sql"
+const releaseExceptionApprovalLedgerPhase = "remediation"
+
+type ApprovalState struct {
+	Status        string
+	MigrationHash string
+	Actor         string
+	Reason        string
+	Applied       bool
+}
+
 func List() ([]Migration, error) {
 	entries, err := fs.ReadDir(migrationFS, "migrations")
 	if err != nil {
@@ -73,12 +84,193 @@ func Up(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 		if alreadyApplied {
 			continue
 		}
+		if migration.Name == ReleaseExceptionMigrationName {
+			approval, err := Approval(ctx, pool, migration.Name)
+			if err != nil {
+				return nil, err
+			}
+			if !approvalAllowsMigration(approval, migrationHash(migration.SQL)) {
+				continue
+			}
+		}
 		if err := apply(ctx, pool, migration); err != nil {
 			return nil, err
 		}
 		applied = append(applied, migration.Name)
 	}
 	return applied, nil
+}
+
+func Approve(ctx context.Context, pool *pgxpool.Pool, name string, actor string, reason string) (ApprovalState, error) {
+	migration, err := migrationByName(name)
+	if err != nil {
+		return ApprovalState{}, err
+	}
+	actor = strings.TrimSpace(actor)
+	reason = strings.TrimSpace(reason)
+	if actor == "" || reason == "" {
+		return ApprovalState{}, fmt.Errorf("migration approval actor and reason are required")
+	}
+	if err := ensureTable(ctx, pool); err != nil {
+		return ApprovalState{}, err
+	}
+	var ledgerExists bool
+	if err := pool.QueryRow(ctx, `SELECT to_regclass('public.migration_ledger') IS NOT NULL`).Scan(&ledgerExists); err != nil {
+		return ApprovalState{}, fmt.Errorf("check migration ledger: %w", err)
+	}
+	if !ledgerExists {
+		return ApprovalState{}, fmt.Errorf("migration ledger is required before approving %s", name)
+	}
+	evidence, err := json.Marshal(map[string]any{
+		"actor": actor, "reason": reason, "risk_level": "R4 migration_security", "approval_status": "approved",
+	})
+	if err != nil {
+		return ApprovalState{}, fmt.Errorf("marshal migration approval evidence: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `
+INSERT INTO migration_ledger (migration_name, phase, status, message, migration_hash, evidence_json, remediation)
+VALUES ($1, $4, 'pass', 'explicit R4 migration approval recorded', $2, $3::jsonb, 'revoke approval before apply or disable release exception writes after apply')
+ON CONFLICT (migration_name, phase) DO UPDATE
+SET status = EXCLUDED.status,
+    message = EXCLUDED.message,
+    migration_hash = EXCLUDED.migration_hash,
+    evidence_json = EXCLUDED.evidence_json,
+    remediation = EXCLUDED.remediation,
+    updated_at = now()`, name, migrationHash(migration.SQL), string(evidence), releaseExceptionApprovalLedgerPhase); err != nil {
+		return ApprovalState{}, fmt.Errorf("record migration approval: %w", err)
+	}
+	return Approval(ctx, pool, name)
+}
+
+func Revoke(ctx context.Context, pool *pgxpool.Pool, name string, actor string, reason string) (ApprovalState, error) {
+	migration, err := migrationByName(name)
+	if err != nil {
+		return ApprovalState{}, err
+	}
+	actor = strings.TrimSpace(actor)
+	reason = strings.TrimSpace(reason)
+	if actor == "" || reason == "" {
+		return ApprovalState{}, fmt.Errorf("migration revocation actor and reason are required")
+	}
+	evidence, err := json.Marshal(map[string]any{
+		"actor": actor, "reason": reason, "risk_level": "R4 migration_security", "approval_status": "revoked",
+	})
+	if err != nil {
+		return ApprovalState{}, fmt.Errorf("marshal migration revocation evidence: %w", err)
+	}
+	result, err := pool.Exec(ctx, `
+UPDATE migration_ledger
+SET status = 'blocked',
+    message = 'R4 migration approval revoked; release exception writes are disabled',
+    migration_hash = $2,
+    evidence_json = $3::jsonb,
+    remediation = 'record a new explicit approval before any further release exception write',
+    updated_at = now()
+WHERE migration_name = $1 AND phase = $4`, name, migrationHash(migration.SQL), string(evidence), releaseExceptionApprovalLedgerPhase)
+	if err != nil {
+		return ApprovalState{}, fmt.Errorf("revoke migration approval: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ApprovalState{}, fmt.Errorf("migration approval not found for %s", name)
+	}
+	return Approval(ctx, pool, name)
+}
+
+func ApplyApproved(ctx context.Context, pool *pgxpool.Pool, name string) (bool, error) {
+	migration, err := migrationByName(name)
+	if err != nil {
+		return false, err
+	}
+	if err := ensureTable(ctx, pool); err != nil {
+		return false, err
+	}
+	applied, err := isApplied(ctx, pool, name)
+	if err != nil || applied {
+		return false, err
+	}
+	approval, err := Approval(ctx, pool, name)
+	if err != nil {
+		return false, err
+	}
+	if !approvalAllowsMigration(approval, migrationHash(migration.SQL)) {
+		return false, fmt.Errorf("effective approved migration approval is required for %s", name)
+	}
+	if err := apply(ctx, pool, migration); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func Approval(ctx context.Context, pool *pgxpool.Pool, name string) (ApprovalState, error) {
+	state := ApprovalState{}
+	var tablesReady bool
+	if err := pool.QueryRow(ctx, `
+SELECT to_regclass('public.schema_migrations') IS NOT NULL
+   AND to_regclass('public.migration_ledger') IS NOT NULL`).Scan(&tablesReady); err != nil {
+		return ApprovalState{}, fmt.Errorf("check migration approval tables: %w", err)
+	}
+	if !tablesReady {
+		return state, nil
+	}
+	var evidenceRaw []byte
+	var ledgerStatus string
+	err := pool.QueryRow(ctx, `
+SELECT status, migration_hash, evidence_json,
+       EXISTS (SELECT 1 FROM schema_migrations WHERE name = $1)
+FROM migration_ledger
+WHERE migration_name = $1 AND phase = $2`, name, releaseExceptionApprovalLedgerPhase).Scan(&ledgerStatus, &state.MigrationHash, &evidenceRaw, &state.Applied)
+	if err == pgx.ErrNoRows {
+		applied, applyErr := isApplied(ctx, pool, name)
+		state.Applied = applied
+		return state, applyErr
+	}
+	if err != nil {
+		return ApprovalState{}, fmt.Errorf("load migration approval: %w", err)
+	}
+	var evidence map[string]any
+	if err := json.Unmarshal(evidenceRaw, &evidence); err != nil {
+		return ApprovalState{}, fmt.Errorf("decode migration approval evidence: %w", err)
+	}
+	state.Actor, _ = evidence["actor"].(string)
+	state.Reason, _ = evidence["reason"].(string)
+	state.Status, _ = evidence["approval_status"].(string)
+	if state.Status == "" {
+		state.Status = ledgerStatus
+	}
+	return state, nil
+}
+
+func migrationByName(name string) (Migration, error) {
+	migrations, err := List()
+	if err != nil {
+		return Migration{}, err
+	}
+	for _, migration := range migrations {
+		if migration.Name == name {
+			return migration, nil
+		}
+	}
+	return Migration{}, fmt.Errorf("migration not found: %s", name)
+}
+
+func ApprovalEffective(name string, state ApprovalState) (bool, error) {
+	migration, err := migrationByName(name)
+	if err != nil {
+		return false, err
+	}
+	return approvalAllowsMigration(state, migrationHash(migration.SQL)), nil
+}
+
+func ExpectedHash(name string) (string, error) {
+	migration, err := migrationByName(name)
+	if err != nil {
+		return "", err
+	}
+	return migrationHash(migration.SQL), nil
+}
+
+func approvalAllowsMigration(state ApprovalState, expectedHash string) bool {
+	return state.Status == "approved" && state.MigrationHash == expectedHash
 }
 
 func Statuses(ctx context.Context, pool *pgxpool.Pool) ([]Status, error) {
