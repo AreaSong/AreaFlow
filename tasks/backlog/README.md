@@ -1,5 +1,5 @@
 # Backlog
 
-候选工作放在这里。Backlog 不代表 active task，也不会被任何 runner 执行。
+候选工作可以在进入正式 workflow 前暂存于此。Backlog 不代表已批准执行，也不会自动被 worker 领取。
 
-- [`0-100-platform-backlog.md`](0-100-platform-backlog.md)：从 Phase 0 到 v1.0 的候选任务、门禁和风险边界。
+历史 0-100 平台 backlog 已归档到 [`../../docs/history/v1.0/plans/task-backlog.md`](../../docs/history/v1.0/plans/task-backlog.md)。产品级未来方向维护在 [`../../docs/product/roadmap.md`](../../docs/product/roadmap.md)。
