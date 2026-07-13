@@ -7,7 +7,7 @@
 | [`plans/`](plans/) | master plan、phase backlog、platform blueprint 和 task backlog |
 | [`milestones/`](milestones/) | v0.1-v1.0 阶段门禁与完成条件 |
 | [`evidence/`](evidence/) | smoke、readiness、audit 和 release evidence |
-| [`contracts/`](contracts/) | v0.1-v1.0 版本实施合同和旧数据模型 |
+| [`contracts/`](contracts/) | v0.1-v1.0 版本实施合同、旧架构合同、旧数据模型和 dogfood 合同 |
 | [`migrations/`](migrations/) | AreaMatrix 一次性迁移、cutover 和 rollback 材料 |
 
 当前产品功能和架构请从 [`../../README.md`](../../README.md) 进入。

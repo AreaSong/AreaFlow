@@ -11,8 +11,8 @@ import (
 )
 
 var taskMatrixProofSourcePaths = []string{
-	"tasks/backlog/0-100-platform-backlog.md",
-	"docs/development/task-backlog-status-audit.md",
+	"docs/history/v1.0/plans/task-backlog.md",
+	"docs/history/v1.0/evidence/task-backlog-status-audit.md",
 }
 
 func TaskMatrixCurrentBinding() (map[string]any, error) {

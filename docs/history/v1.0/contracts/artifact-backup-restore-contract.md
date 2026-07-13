@@ -3,8 +3,8 @@
 ## 定位
 
 本文定义 AreaFlow 的 artifact 存储、完整性检查、backup manifest、restore dry-run 和 archive/retention
-边界。它补充 [`data-model-v1.md`](data-model-v1.md)、[`api-surface.md`](../history/v1.0/contracts/api-surface.md) 和
-[`command-approval-contract.md`](../history/v1.0/contracts/command-approval-contract.md)。Object backend、archive copy/upload、
+边界。它补充 [`data-model-v1.md`](data-model-v1.md)、[`api.md`](../../../reference/api.md) 和
+[`commands-and-approvals.md`](../../../concepts/commands-and-approvals.md)。Object backend、archive copy/upload、
 retention-aware GC 和 delete apply 的长期边界见
 [`object-artifact-retention-contract.md`](object-artifact-retention-contract.md)。
 
@@ -194,7 +194,7 @@ resolve secrets
 ```
 
 真实 archive copy、object storage upload、retention-aware GC、orphan cleanup 和 delete apply 都是后续
-Command API 能力。打开前必须满足 [`command-approval-contract.md`](../history/v1.0/contracts/command-approval-contract.md) 的
+Command API 能力。打开前必须满足 [`commands-and-approvals.md`](../../../concepts/commands-and-approvals.md) 的
 idempotency、permission、approval、rollback 和 audit 要求，并满足
 [`object-artifact-retention-contract.md`](object-artifact-retention-contract.md) 的 verifier、retention、
 restore dry-run impact 和 delete suspension 规则。

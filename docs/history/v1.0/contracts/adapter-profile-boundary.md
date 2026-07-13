@@ -89,7 +89,7 @@ permission evaluator、Command API 和 audit event 共同决定。
 ## Plugin 职责
 
 Plugin 是后续扩展机制，不是 v0 必需品。Plugin / marketplace 的完整边界见
-[`plugin-marketplace-boundary.md`](../../proposals/plugin-marketplace.md)。长期 plugin 可以提供：
+[`plugin-marketplace-boundary.md`](../../../../proposals/plugin-marketplace.md)。长期 plugin 可以提供：
 
 ```text
 new adapter

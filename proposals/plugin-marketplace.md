@@ -5,9 +5,9 @@
 ## 定位
 
 本文定义 AreaFlow 的 adapter、workflow profile、template 和 plugin marketplace 边界。它补充
-[`adapter-profile-boundary.md`](../docs/architecture/adapter-profile-boundary.md)、
-[`workflow-engine-contract.md`](../docs/architecture/workflow-engine-contract.md)、
-[`command-approval-contract.md`](../docs/history/v1.0/contracts/command-approval-contract.md) 和
+[`adapter-and-profile.md`](../docs/concepts/adapter-and-profile.md)、
+[`workflow-lifecycle.md`](../docs/concepts/workflow-lifecycle.md)、
+[`commands-and-approvals.md`](../docs/concepts/commands-and-approvals.md) 和
 [`high-risk-apply-ladder.md`](./high-risk-apply.md)。
 
 v1.0 的目标是稳定 plugin / adapter / profile 的治理边界和 seed catalog，不是打开未知第三方代码执行。

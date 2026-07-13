@@ -3,12 +3,12 @@
 ## Purpose
 
 本文定义 AreaFlow v0.1 AreaMatrix adapter 的只读导入深度和 artifact metadata 策略。它补充
-[`v0.1-import-mirror-contract.md`](../history/v1.0/contracts/v0.1-import-mirror-contract.md)、
-[`data-model-v0.1.md`](../history/v1.0/contracts/data-model-v0.1.md)、
+[`v0.1-import-mirror-contract.md`](v0.1-import-mirror-contract.md)、
+[`data-model-v0.1.md`](data-model-v0.1.md)、
 [`artifact-backup-restore-contract.md`](artifact-backup-restore-contract.md)、
 [`adapter-profile-boundary.md`](adapter-profile-boundary.md)、
-[`../dogfood/areamatrix-contract.md`](../dogfood/areamatrix-contract.md) 和
-[`../migration/areamatrix-workflow-migration.md`](../history/v1.0/migrations/areamatrix-workflow-migration.md)。
+[`areamatrix-dogfood-contract.md`](areamatrix-dogfood-contract.md) 和
+[`../migration/areamatrix-workflow-migration.md`](../migrations/areamatrix-workflow-migration.md)。
 
 核心规则：v0.1 import 是 metadata index，不是历史内容迁移。AreaFlow 可以读取 AreaMatrix 的 workflow
 索引、状态 ledger、少量机器可解析文件和文件 metadata，但不能复制 prompt、日志、报告、diff、evidence

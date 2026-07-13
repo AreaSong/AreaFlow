@@ -1681,7 +1681,7 @@ func ProjectCutoverReadinessFromParts(verification ProjectVerificationBundle, co
 	readiness.add("approval_gate", cutoverLatestGateStatus(gates, "approval_gate"), cutoverGateMessage(gates, "approval_gate"), cutoverGateMetadata(gates, "approval_gate"))
 	readiness.add("live_mapping_gate", cutoverLatestGateStatus(gates, "live_mapping_gate"), cutoverGateMessage(gates, "live_mapping_gate"), cutoverGateMetadata(gates, "live_mapping_gate"))
 	readiness.add("rollback_plan", "pass", "rollback plan is documented as append-only soft/hard rollback in migration docs", map[string]any{
-		"source": "docs/migration/cutover-rollback-compat.md",
+		"source": "docs/history/v1.0/migrations/cutover-rollback-compat.md",
 	})
 	readiness.PhaseGate = EvaluateCutoverPhaseGate(readiness)
 	readiness.Status = readiness.PhaseGate.Status

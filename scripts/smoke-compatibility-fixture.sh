@@ -511,7 +511,7 @@ readonly_evidence_json="$(go run ./cmd/areaflow project shim-readiness-evidence 
   --key real_areamatrix_readonly_smoke \
   --status pass \
   --summary "compat fixture proves read-only smoke evidence recording" \
-  --evidence-uri "docs/development/compatibility-shim-readiness-evidence.md" \
+  --evidence-uri "docs/history/v1.0/evidence/compatibility-shim-readiness-evidence.md" \
   --json)"
 assert_contains "${readonly_evidence_json}" '"evidence_key": "real_areamatrix_readonly_smoke"'
 assert_contains "${readonly_evidence_json}" '"status": "recorded"'
@@ -539,7 +539,7 @@ dirty_review_evidence_json="$(go run ./cmd/areaflow project shim-readiness-evide
   --key areamatrix_dirty_worktree_review \
   --status pass \
   --summary "compat fixture proves dirty worktree review evidence recording" \
-  --evidence-uri "docs/development/compatibility-shim-readiness-evidence.md" \
+  --evidence-uri "docs/history/v1.0/evidence/compatibility-shim-readiness-evidence.md" \
   --json)"
 assert_contains "${dirty_review_evidence_json}" '"evidence_key": "areamatrix_dirty_worktree_review"'
 assert_contains "${dirty_review_evidence_json}" '"status": "recorded"'

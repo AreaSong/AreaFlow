@@ -144,10 +144,10 @@ GET /api/v1/ops/migration-ledger-readiness
 Query API 不应触发文件写入、命令执行、secret 读取或 worker 调度。
 
 Release readiness、exception、final gate、evidence、package/distribution/publish/rollout preview 的统一
-语义见 [`release-final-gate-contract.md`](../../../architecture/release-final-gate-contract.md)。Release Query API 只回答
+语义见 [`release-final-gate-contract.md`](../contracts/release-final-gate-contract.md)。Release Query API 只回答
 go/no-go 和预览，不创建 package、不写 exception record、不运行 migration、不 tag/push/sign/upload/publish。
 0-100% completion audit 的整体只读聚合语义见
-[`completion-audit-contract.md`](../../../architecture/completion-audit-contract.md)；release final gate `pass` 仍不能单独证明
+[`completion-audit-contract.md`](../contracts/completion-audit-contract.md)；release final gate `pass` 仍不能单独证明
 AreaFlow 已达 100%。
 
 全局 ID route 的 `project_key` 是兼容型 visibility guard。当前本机 single-user 模式仍允许不传
@@ -1212,9 +1212,9 @@ generated_at
 不解析 secret，也不执行 restore。`manifest_hash` 只覆盖可恢复清单的稳定形状，不包含
 `generated_at`。
 Artifact / backup / restore 的完整合同见
-[`artifact-backup-restore-contract.md`](../../../architecture/artifact-backup-restore-contract.md)；object backend、archive copy/upload、
+[`artifact-backup-restore-contract.md`](../contracts/artifact-backup-restore-contract.md)；object backend、archive copy/upload、
 GC/delete 的长期合同见
-[`object-artifact-retention-contract.md`](../../../architecture/object-artifact-retention-contract.md)。Manifest 不是 restore package。
+[`object-artifact-retention-contract.md`](../contracts/object-artifact-retention-contract.md)。Manifest 不是 restore package。
 
 `GET /api/v1/backup/restore-plan` 返回只读 restore dry-run plan，用于把 backup manifest 与 artifact
 integrity 串成恢复前检查链。响应包含：
@@ -1543,7 +1543,7 @@ generated_at
 当前 baseline 应返回 `blocked`，因为 release readiness、acceptance gate 和 exception apply preview
 仍未同时通过。
 完整 final gate / exception 语义见
-[`release-final-gate-contract.md`](../../../architecture/release-final-gate-contract.md)；即使该接口未来返回 `pass`，也只允许
+[`release-final-gate-contract.md`](../contracts/release-final-gate-contract.md)；即使该接口未来返回 `pass`，也只允许
 进入 evidence bundle、package preview、distribution preview、publish gate 和 rollout plan preview，
 不代表真实发布。
 
@@ -1874,7 +1874,7 @@ v0.8b 默认策略为 `default_fifo`；v0.8c 起每个项目读取 `project_sche
 active_leases)`，下限为 0。该接口只返回 recommended / blocked、blocked_reasons、
 available_slots、required_capabilities、agent_role、engine_profile、engine readiness 和 next_action，
 不执行 `run-once`，不创建 lease，不写 event/audit，不复用真实 acquire lease path。调度合同见
-[`worker-scheduling-contract.md`](../../../architecture/worker-scheduling-contract.md)；v0.8 阶段合同见
+[`worker-scheduling-contract.md`](../contracts/worker-scheduling-contract.md)；v0.8 阶段合同见
 [`v0.8-multi-project-worker-pool-contract.md`](./v0.8-multi-project-worker-pool-contract.md)。
 `recommended=true`、`available_slots>0` 和 `next_action=worker_run_once_preview` 都不是 scheduler
 apply、lease claim、worker dispatch 或 execution cutover。v0.8d 的 engine readiness 只读取项目配置，
@@ -2731,7 +2731,7 @@ support bundle preview
 restore、publish 或 release exception 的动作，都必须回到 Command API，并执行 permission、gate、
 approval、idempotency 和 audit。Admin API 可以帮助 bootstrap 或诊断，但不能直接改写 workflow 主状态。
 Operations / deployment / observability 的完整边界见
-[`operations-deployment-observability-boundary.md`](../../../architecture/operations-deployment-observability-boundary.md)；support
+[`operations-deployment-observability-boundary.md`](../contracts/operations-deployment-observability-boundary.md)；support
 bundle 在 v1.0 只能是 metadata-only preview，不能导出 prompt、secret、用户文件、raw artifact 或未脱敏日志。
 Auth、team、token、secret 和 remote worker credential 相关 command 进入实现前，还必须先满足
 [`auth-team-secret-boundary.md`](../../../../proposals/auth-team-secret.md) 的 R4 opening ladder。Endpoint 或 CLI

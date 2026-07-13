@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted for Phase 0 implementation.
+Accepted. Command API、默认只读、显式授权和审计边界继续有效；当前说明见
+[`concepts/commands-and-approvals.md`](../concepts/commands-and-approvals.md) 与
+[`architecture/security.md`](../architecture/security.md)。
 
 ## Context
 

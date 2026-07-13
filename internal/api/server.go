@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -144,6 +145,25 @@ type ProjectStore interface {
 	RecordDoctorReport(ctx context.Context, projectID int64, summary map[string]any, options project.RecordDoctorReportOptions) (project.RecordDoctorReportResult, error)
 }
 
+type ResourceCollectionStore interface {
+	ListWorkflowCollection(context.Context, project.WorkflowPageOptions) (project.WorkflowCollectionPage, error)
+	ListRunCollection(context.Context, project.RunPageOptions) (project.RunCollectionPage, error)
+	ListWorkerCollection(context.Context, project.ResourcePageOptions) (project.WorkerCollectionPage, error)
+	ListArtifactCollection(context.Context, project.ArtifactPageOptions) (project.ArtifactCollectionPage, error)
+}
+
+type ResourceDetailStore interface {
+	GetWorker(context.Context, int64, int64, int) (project.WorkerDetail, error)
+	ListRunTasks(context.Context, int64) ([]project.RunTaskRecord, error)
+	GetRunTask(context.Context, int64, int64) (project.RunTaskRecord, error)
+	ListRunAttempts(context.Context, int64) ([]project.RunAttemptRecord, error)
+	GetRunAttempt(context.Context, int64, int64) (project.RunAttemptRecord, error)
+}
+
+type AuditEventCollectionStore interface {
+	ListAuditEventCollection(context.Context, project.AuditEventPageOptions) (project.AuditEventPage, error)
+}
+
 type ProjectDoctorRunner func(ctx context.Context, record project.Record, store ProjectStore, allowNative bool) (doctor.Report, error)
 type ProjectImporter func(ctx context.Context, record project.Record, options importer.Options) (importer.Result, error)
 
@@ -236,6 +256,8 @@ type auditEventResponse struct {
 type auditEventsResponse struct {
 	ProjectKey  string               `json:"project_key,omitempty"`
 	AuditEvents []auditEventResponse `json:"audit_events"`
+	Count       int                  `json:"count"`
+	NextCursor  string               `json:"next_cursor,omitempty"`
 }
 
 type auditCoverageResponse struct {
@@ -2479,6 +2501,7 @@ type executionCutoverNextStepResponse struct {
 
 type workflowVersionResponse struct {
 	ID              int64          `json:"id"`
+	ProjectID       int64          `json:"project_id"`
 	DisplayLabel    string         `json:"display_label"`
 	VersionKind     string         `json:"version_kind"`
 	LifecycleStatus string         `json:"lifecycle_status"`
@@ -2519,6 +2542,17 @@ type workflowItemLinkResponse struct {
 type workflowVersionListResponse struct {
 	Project          projectRecordResponse     `json:"project"`
 	WorkflowVersions []workflowVersionResponse `json:"workflow_versions"`
+}
+
+type workflowCollectionItemResponse struct {
+	Project         projectRecordResponse   `json:"project"`
+	WorkflowVersion workflowVersionResponse `json:"workflow_version"`
+}
+
+type workflowCollectionResponse struct {
+	Workflows  []workflowCollectionItemResponse `json:"workflows"`
+	Count      int                              `json:"count"`
+	NextCursor string                           `json:"next_cursor,omitempty"`
 }
 
 type createWorkflowVersionRequest struct {
@@ -3005,6 +3039,18 @@ type workflowVersionRunsResponse struct {
 	Runs            []runResponse           `json:"runs"`
 }
 
+type runCollectionItemResponse struct {
+	Project         projectRecordResponse   `json:"project"`
+	WorkflowVersion workflowVersionResponse `json:"workflow_version"`
+	Run             runResponse             `json:"run"`
+}
+
+type runCollectionResponse struct {
+	Runs       []runCollectionItemResponse `json:"runs"`
+	Count      int                         `json:"count"`
+	NextCursor string                      `json:"next_cursor,omitempty"`
+}
+
 type runEventsResponse struct {
 	RunID  int64           `json:"run_id"`
 	Events []eventResponse `json:"events"`
@@ -3449,6 +3495,32 @@ type workerListResponse struct {
 	Workers []workerResponse      `json:"workers"`
 }
 
+type workerHeartbeatResponse struct {
+	ID         int64          `json:"id"`
+	ProjectID  int64          `json:"project_id"`
+	WorkerID   int64          `json:"worker_id"`
+	Status     string         `json:"status"`
+	ObservedAt string         `json:"observed_at"`
+	Metadata   map[string]any `json:"metadata"`
+}
+
+type workerDetailResponse struct {
+	Worker     workerResponse            `json:"worker"`
+	Heartbeats []workerHeartbeatResponse `json:"heartbeats"`
+	Leases     []leaseResponse           `json:"leases"`
+}
+
+type workerCollectionItemResponse struct {
+	Project projectRecordResponse `json:"project"`
+	Worker  workerResponse        `json:"worker"`
+}
+
+type workerCollectionResponse struct {
+	Workers    []workerCollectionItemResponse `json:"workers"`
+	Count      int                            `json:"count"`
+	NextCursor string                         `json:"next_cursor,omitempty"`
+}
+
 type workerPoolSummaryResponse struct {
 	Projects           []workerPoolProjectSummaryResponse `json:"projects"`
 	TotalProjects      int64                              `json:"total_projects"`
@@ -3605,7 +3677,9 @@ type artifactRedactionPlanResponse struct {
 
 type artifactResponse struct {
 	ID                int64          `json:"id"`
+	ProjectID         int64          `json:"project_id"`
 	WorkflowVersionID int64          `json:"workflow_version_id"`
+	RunID             int64          `json:"run_id,omitempty"`
 	WorkflowItemID    int64          `json:"workflow_item_id,omitempty"`
 	ArtifactType      string         `json:"artifact_type"`
 	StorageBackend    string         `json:"storage_backend"`
@@ -3618,6 +3692,17 @@ type artifactResponse struct {
 	CreatedAt         string         `json:"created_at"`
 }
 
+type artifactCollectionItemResponse struct {
+	Project  projectRecordResponse `json:"project"`
+	Artifact artifactResponse      `json:"artifact"`
+}
+
+type artifactCollectionResponse struct {
+	Artifacts  []artifactCollectionItemResponse `json:"artifacts"`
+	Count      int                              `json:"count"`
+	NextCursor string                           `json:"next_cursor,omitempty"`
+}
+
 type runnerPreflightResponse struct {
 	Status   string                         `json:"status"`
 	Checks   []projectReadinessItemResponse `json:"checks"`
@@ -3626,6 +3711,7 @@ type runnerPreflightResponse struct {
 
 type runResponse struct {
 	ID                int64          `json:"id"`
+	ProjectID         int64          `json:"project_id"`
 	WorkflowVersionID int64          `json:"workflow_version_id"`
 	RunType           string         `json:"run_type"`
 	RunKind           string         `json:"run_kind"`
@@ -3641,6 +3727,7 @@ type runResponse struct {
 
 type runTaskResponse struct {
 	ID                int64          `json:"id"`
+	ProjectID         int64          `json:"project_id"`
 	WorkflowVersionID int64          `json:"workflow_version_id"`
 	WorkflowItemID    int64          `json:"workflow_item_id,omitempty"`
 	RunID             int64          `json:"run_id"`
@@ -3656,6 +3743,7 @@ type runTaskResponse struct {
 
 type runAttemptResponse struct {
 	ID                int64          `json:"id"`
+	ProjectID         int64          `json:"project_id"`
 	WorkflowVersionID int64          `json:"workflow_version_id"`
 	WorkflowItemID    int64          `json:"workflow_item_id,omitempty"`
 	RunID             int64          `json:"run_id"`
@@ -3777,7 +3865,12 @@ func (server Server) handler() http.Handler {
 	mux.HandleFunc("/api/ops/migration-ledger-readiness", server.migrationLedgerReadinessHandler)
 	mux.HandleFunc("/api/projects", server.projectsHandler)
 	mux.HandleFunc("/api/projects/", server.projectHandler)
+	mux.HandleFunc("/api/workflows", server.workflowsHandler)
+	mux.HandleFunc("/api/runs", server.runCollectionHandler)
 	mux.HandleFunc("/api/runs/", server.runsHandler)
+	mux.HandleFunc("/api/workers", server.workerCollectionHandler)
+	mux.HandleFunc("/api/workers/", server.workerDetailHandler)
+	mux.HandleFunc("/api/artifacts", server.artifactCollectionHandler)
 	mux.HandleFunc("/api/artifacts/", server.artifactsHandler)
 	return apiVersionAlias(mux)
 }
@@ -4456,6 +4549,389 @@ func (s Server) projectsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, buildProjectListResponse(records))
 }
 
+func (s Server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/workflows" {
+		writeError(w, http.StatusNotFound, "workflows endpoint not found")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	limit, ok := collectionLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	if store, supported := s.store.(ResourceCollectionStore); supported {
+		page, err := store.ListWorkflowCollection(r.Context(), project.WorkflowPageOptions{
+			ResourcePageOptions: project.ResourcePageOptions{
+				ProjectKey: r.URL.Query().Get("project_key"), Status: r.URL.Query().Get("status"),
+				Kind: r.URL.Query().Get("kind"), Cursor: r.URL.Query().Get("cursor"), Limit: limit,
+			},
+			ImportMode: r.URL.Query().Get("import_mode"),
+		})
+		if err != nil {
+			writeResourceCollectionError(w, err, "list workflows failed")
+			return
+		}
+		response := workflowCollectionResponse{Workflows: make([]workflowCollectionItemResponse, 0, len(page.Items)), Count: len(page.Items), NextCursor: page.NextCursor}
+		for _, item := range page.Items {
+			response.Workflows = append(response.Workflows, workflowCollectionItemResponse{Project: buildProjectRecordResponse(item.Project), WorkflowVersion: buildWorkflowVersionResponse(item.Workflow)})
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+	records, ok := s.collectionProjectRecords(w, r)
+	if !ok {
+		return
+	}
+	type entry struct {
+		record  project.Record
+		version project.WorkflowVersion
+	}
+	entries := make([]entry, 0)
+	for _, record := range records {
+		versions, err := s.store.ListWorkflowVersions(r.Context(), record)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list workflows failed")
+			return
+		}
+		for _, version := range versions {
+			entries = append(entries, entry{record: record, version: version})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].version.UpdatedAt.After(entries[j].version.UpdatedAt) })
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	response := workflowCollectionResponse{Workflows: make([]workflowCollectionItemResponse, 0, len(entries)), Count: len(entries)}
+	for _, item := range entries {
+		response.Workflows = append(response.Workflows, workflowCollectionItemResponse{Project: buildProjectRecordResponse(item.record), WorkflowVersion: buildWorkflowVersionResponse(item.version)})
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s Server) runCollectionHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/runs" {
+		writeError(w, http.StatusNotFound, "runs endpoint not found")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	limit, ok := collectionLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	dryRun, err := optionalBoolQuery(r, "dry_run")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if store, supported := s.store.(ResourceCollectionStore); supported {
+		page, err := store.ListRunCollection(r.Context(), project.RunPageOptions{
+			ResourcePageOptions: project.ResourcePageOptions{
+				ProjectKey: r.URL.Query().Get("project_key"), Status: r.URL.Query().Get("status"),
+				Kind: r.URL.Query().Get("kind"), Type: r.URL.Query().Get("type"),
+				Cursor: r.URL.Query().Get("cursor"), Limit: limit,
+			}, DryRun: dryRun,
+		})
+		if err != nil {
+			writeResourceCollectionError(w, err, "list runs failed")
+			return
+		}
+		response := runCollectionResponse{Runs: make([]runCollectionItemResponse, 0, len(page.Items)), Count: len(page.Items), NextCursor: page.NextCursor}
+		for _, item := range page.Items {
+			response.Runs = append(response.Runs, runCollectionItemResponse{Project: buildProjectRecordResponse(item.Project), WorkflowVersion: buildWorkflowVersionResponse(item.Workflow), Run: buildRunResponse(item.Run)})
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+	records, ok := s.collectionProjectRecords(w, r)
+	if !ok {
+		return
+	}
+	type entry struct {
+		record  project.Record
+		version project.WorkflowVersion
+		run     project.RunRecord
+	}
+	entries := make([]entry, 0)
+	for _, record := range records {
+		versions, err := s.store.ListWorkflowVersions(r.Context(), record)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list run workflow versions failed")
+			return
+		}
+		for _, version := range versions {
+			runs, err := s.store.ListWorkflowVersionRuns(r.Context(), record, version, limit)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "list runs failed")
+				return
+			}
+			for _, run := range runs {
+				entries = append(entries, entry{record: record, version: version, run: run})
+			}
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].run.StartedAt.After(entries[j].run.StartedAt) })
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	response := runCollectionResponse{Runs: make([]runCollectionItemResponse, 0, len(entries)), Count: len(entries)}
+	for _, item := range entries {
+		response.Runs = append(response.Runs, runCollectionItemResponse{Project: buildProjectRecordResponse(item.record), WorkflowVersion: buildWorkflowVersionResponse(item.version), Run: buildRunResponse(item.run)})
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s Server) workerCollectionHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/workers" {
+		writeError(w, http.StatusNotFound, "workers endpoint not found")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	limit, ok := collectionLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	if store, supported := s.store.(ResourceCollectionStore); supported {
+		page, err := store.ListWorkerCollection(r.Context(), project.ResourcePageOptions{
+			ProjectKey: r.URL.Query().Get("project_key"), Status: r.URL.Query().Get("status"),
+			Key: r.URL.Query().Get("worker_key"), Type: r.URL.Query().Get("type"), Kind: r.URL.Query().Get("capability"),
+			Cursor: r.URL.Query().Get("cursor"), Limit: limit,
+		})
+		if err != nil {
+			writeResourceCollectionError(w, err, "list workers failed")
+			return
+		}
+		response := workerCollectionResponse{Workers: make([]workerCollectionItemResponse, 0, len(page.Items)), Count: len(page.Items), NextCursor: page.NextCursor}
+		for _, item := range page.Items {
+			response.Workers = append(response.Workers, workerCollectionItemResponse{Project: buildProjectRecordResponse(item.Project), Worker: buildWorkerResponse(item.Worker)})
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+	records, ok := s.collectionProjectRecords(w, r)
+	if !ok {
+		return
+	}
+	type entry struct {
+		record project.Record
+		worker project.WorkerRecord
+	}
+	entries := make([]entry, 0)
+	for _, record := range records {
+		workers, err := s.store.ListWorkers(r.Context(), record, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list workers failed")
+			return
+		}
+		for _, worker := range workers {
+			entries = append(entries, entry{record: record, worker: worker})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].worker.UpdatedAt.After(entries[j].worker.UpdatedAt) })
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	response := workerCollectionResponse{Workers: make([]workerCollectionItemResponse, 0, len(entries)), Count: len(entries)}
+	for _, item := range entries {
+		response.Workers = append(response.Workers, workerCollectionItemResponse{Project: buildProjectRecordResponse(item.record), Worker: buildWorkerResponse(item.worker)})
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s Server) workerDetailHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	workerID, err := parsePositiveInt64(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/workers/"), "/"), "worker id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	store, ok := s.store.(ResourceDetailStore)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "worker detail is unavailable")
+		return
+	}
+	scope, err := s.projectVisibilityScopeFromQuery(r.Context(), r)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	projectID := int64(0)
+	if scope.enabled {
+		projectID = scope.record.ID
+	}
+	limit, ok := collectionLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	detail, err := store.GetWorker(r.Context(), workerID, projectID, limit)
+	if err != nil {
+		if errors.Is(err, project.ErrWorkerNotFound) {
+			writeError(w, http.StatusNotFound, "worker not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "load worker failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, buildWorkerDetailResponse(detail))
+}
+
+func (s Server) artifactCollectionHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/artifacts" {
+		writeError(w, http.StatusNotFound, "artifacts endpoint not found")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	limit, ok := collectionLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	runID, err := optionalPositiveInt64Query(r, "run_id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	workflowVersionID, err := optionalPositiveInt64Query(r, "workflow_version_id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if store, supported := s.store.(ResourceCollectionStore); supported {
+		page, err := store.ListArtifactCollection(r.Context(), project.ArtifactPageOptions{
+			ResourcePageOptions: project.ResourcePageOptions{
+				ProjectKey: r.URL.Query().Get("project_key"), Type: r.URL.Query().Get("type"),
+				Cursor: r.URL.Query().Get("cursor"), Limit: limit,
+			}, StorageBackend: r.URL.Query().Get("storage_backend"), SHA256: r.URL.Query().Get("sha256"),
+			RunID: runID, WorkflowVersionID: workflowVersionID,
+		})
+		if err != nil {
+			writeResourceCollectionError(w, err, "list artifacts failed")
+			return
+		}
+		response := artifactCollectionResponse{Artifacts: make([]artifactCollectionItemResponse, 0, len(page.Items)), Count: len(page.Items), NextCursor: page.NextCursor}
+		for _, item := range page.Items {
+			response.Artifacts = append(response.Artifacts, artifactCollectionItemResponse{Project: buildProjectRecordResponse(item.Project), Artifact: buildArtifactResponse(item.Artifact)})
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+	records, ok := s.collectionProjectRecords(w, r)
+	if !ok {
+		return
+	}
+	type entry struct {
+		record   project.Record
+		artifact project.ArtifactRecord
+	}
+	entries := make([]entry, 0)
+	for _, record := range records {
+		artifacts, err := s.store.ListProjectArtifacts(r.Context(), record, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list artifacts failed")
+			return
+		}
+		for _, artifact := range artifacts {
+			entries = append(entries, entry{record: record, artifact: artifact})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].artifact.CreatedAt.After(entries[j].artifact.CreatedAt) })
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	response := artifactCollectionResponse{Artifacts: make([]artifactCollectionItemResponse, 0, len(entries)), Count: len(entries)}
+	for _, item := range entries {
+		response.Artifacts = append(response.Artifacts, artifactCollectionItemResponse{Project: buildProjectRecordResponse(item.record), Artifact: buildArtifactResponse(item.artifact)})
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func collectionLimit(w http.ResponseWriter, r *http.Request, fallback int) (int, bool) {
+	limit, err := queryLimit(r, fallback)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return 0, false
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return limit, true
+}
+
+func optionalBoolQuery(r *http.Request, key string) (*bool, error) {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be true or false", key)
+	}
+	return &parsed, nil
+}
+
+func optionalPositiveInt64Query(r *http.Request, key string) (int64, error) {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return parsed, nil
+}
+
+func optionalTimeQuery(r *http.Request, key string) (*time.Time, error) {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must use RFC3339", key)
+	}
+	return &parsed, nil
+}
+
+func writeResourceCollectionError(w http.ResponseWriter, err error, fallback string) {
+	if errors.Is(err, project.ErrInvalidResourceCursor) {
+		writeError(w, http.StatusBadRequest, "invalid cursor")
+		return
+	}
+	writeError(w, http.StatusInternalServerError, fallback)
+}
+
+func (s Server) collectionProjectRecords(w http.ResponseWriter, r *http.Request) ([]project.Record, bool) {
+	projectKey := strings.TrimSpace(r.URL.Query().Get("project_key"))
+	if projectKey != "" {
+		record, err := s.store.GetByKey(r.Context(), projectKey)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "project not found")
+			return nil, false
+		}
+		return []project.Record{record}, true
+	}
+	records, err := s.store.List(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list projects failed")
+		return nil, false
+	}
+	return records, true
+}
+
 func requestAPIBaseURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
@@ -4776,6 +5252,77 @@ func (s Server) runsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "load run failed")
+		return
+	}
+	if parts[1] == "tasks" || parts[1] == "attempts" {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		store, ok := s.store.(ResourceDetailStore)
+		if !ok {
+			writeError(w, http.StatusNotImplemented, "run child resources are unavailable")
+			return
+		}
+		if parts[1] == "tasks" {
+			if len(parts) == 2 {
+				items, err := store.ListRunTasks(r.Context(), runID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "list run tasks failed")
+					return
+				}
+				response := make([]runTaskResponse, 0, len(items))
+				for _, item := range items {
+					response = append(response, buildRunTaskResponse(item))
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "tasks": response})
+				return
+			}
+			itemID, err := parsePositiveInt64(parts[2], "task id")
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			item, err := store.GetRunTask(r.Context(), runID, itemID)
+			if err != nil {
+				if errors.Is(err, project.ErrRunTaskNotFound) {
+					writeError(w, http.StatusNotFound, "run task not found")
+				} else {
+					writeError(w, http.StatusInternalServerError, "load run task failed")
+				}
+				return
+			}
+			writeJSON(w, http.StatusOK, buildRunTaskResponse(item))
+			return
+		}
+		if len(parts) == 2 {
+			items, err := store.ListRunAttempts(r.Context(), runID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "list run attempts failed")
+				return
+			}
+			response := make([]runAttemptResponse, 0, len(items))
+			for _, item := range items {
+				response = append(response, buildRunAttemptResponse(item))
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "attempts": response})
+			return
+		}
+		itemID, err := parsePositiveInt64(parts[2], "attempt id")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		item, err := store.GetRunAttempt(r.Context(), runID, itemID)
+		if err != nil {
+			if errors.Is(err, project.ErrRunAttemptNotFound) {
+				writeError(w, http.StatusNotFound, "run attempt not found")
+			} else {
+				writeError(w, http.StatusInternalServerError, "load run attempt failed")
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, buildRunAttemptResponse(item))
 		return
 	}
 	if parts[1] == "start" || parts[1] == "drain" || parts[1] == "cancel" {
@@ -5712,9 +6259,27 @@ func (s Server) auditEventsHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	limit, err := queryLimit(r, 20)
+	limit, ok := collectionLimit(w, r, 50)
+	if !ok {
+		return
+	}
+	actorID, err := optionalPositiveInt64Query(r, "actor_id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	from, err := optionalTimeQuery(r, "from")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	to, err := optionalTimeQuery(r, "to")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if from != nil && to != nil && from.After(*to) {
+		writeError(w, http.StatusBadRequest, "from must not be after to")
 		return
 	}
 
@@ -5728,6 +6293,22 @@ func (s Server) auditEventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		projectID = record.ID
 		projectKey = record.Key
+	}
+	if store, supported := s.store.(AuditEventCollectionStore); supported {
+		page, err := store.ListAuditEventCollection(r.Context(), project.AuditEventPageOptions{
+			ProjectID: projectID, ActorID: actorID, Action: r.URL.Query().Get("action"),
+			Decision: r.URL.Query().Get("decision"), ResourceType: r.URL.Query().Get("resource_type"),
+			Resource: r.URL.Query().Get("resource"), From: from, To: to,
+			Cursor: r.URL.Query().Get("cursor"), Limit: limit,
+		})
+		if err != nil {
+			writeResourceCollectionError(w, err, "list audit events failed")
+			return
+		}
+		response := buildAuditEventsResponse(projectKey, page.Items)
+		response.NextCursor = page.NextCursor
+		writeJSON(w, http.StatusOK, response)
+		return
 	}
 
 	events, err := s.store.ListAuditEvents(r.Context(), projectID, limit)
@@ -7797,6 +8378,7 @@ func buildAuditEventsResponse(projectKey string, events []project.AuditEventReco
 	response := auditEventsResponse{
 		ProjectKey:  projectKey,
 		AuditEvents: make([]auditEventResponse, 0, len(events)),
+		Count:       len(events),
 	}
 	for _, event := range events {
 		response.AuditEvents = append(response.AuditEvents, buildAuditEventResponse(event))
@@ -8359,7 +8941,9 @@ func buildResidualResponse(residual project.ResidualRecord) residualResponse {
 func buildArtifactResponse(artifact project.ArtifactRecord) artifactResponse {
 	return artifactResponse{
 		ID:                artifact.ID,
+		ProjectID:         artifact.ProjectID,
 		WorkflowVersionID: artifact.WorkflowVersionID,
+		RunID:             artifact.RunID,
 		WorkflowItemID:    artifact.WorkflowItemID,
 		ArtifactType:      artifact.ArtifactType,
 		StorageBackend:    artifact.StorageBackend,
@@ -8393,6 +8977,7 @@ func buildRunnerPreflightResponse(preflight project.RunnerPreflight) runnerPrefl
 func buildRunResponse(run project.RunRecord) runResponse {
 	response := runResponse{
 		ID:                run.ID,
+		ProjectID:         run.ProjectID,
 		WorkflowVersionID: run.WorkflowVersionID,
 		RunType:           run.RunType,
 		RunKind:           run.RunKind,
@@ -8413,6 +8998,7 @@ func buildRunResponse(run project.RunRecord) runResponse {
 func buildRunTaskResponse(task project.RunTaskRecord) runTaskResponse {
 	return runTaskResponse{
 		ID:                task.ID,
+		ProjectID:         task.ProjectID,
 		WorkflowVersionID: task.WorkflowVersionID,
 		WorkflowItemID:    task.WorkflowItemID,
 		RunID:             task.RunID,
@@ -8430,6 +9016,7 @@ func buildRunTaskResponse(task project.RunTaskRecord) runTaskResponse {
 func buildRunAttemptResponse(attempt project.RunAttemptRecord) runAttemptResponse {
 	response := runAttemptResponse{
 		ID:                attempt.ID,
+		ProjectID:         attempt.ProjectID,
 		WorkflowVersionID: attempt.WorkflowVersionID,
 		WorkflowItemID:    attempt.WorkflowItemID,
 		RunID:             attempt.RunID,
@@ -9941,6 +10528,24 @@ func buildWorkerResponse(worker project.WorkerRecord) workerResponse {
 	return response
 }
 
+func buildWorkerDetailResponse(detail project.WorkerDetail) workerDetailResponse {
+	response := workerDetailResponse{
+		Worker:     buildWorkerResponse(detail.Worker),
+		Heartbeats: make([]workerHeartbeatResponse, 0, len(detail.Heartbeats)),
+		Leases:     make([]leaseResponse, 0, len(detail.Leases)),
+	}
+	for _, heartbeat := range detail.Heartbeats {
+		response.Heartbeats = append(response.Heartbeats, workerHeartbeatResponse{
+			ID: heartbeat.ID, ProjectID: heartbeat.ProjectID, WorkerID: heartbeat.WorkerID,
+			Status: heartbeat.Status, ObservedAt: formatTime(heartbeat.ObservedAt), Metadata: heartbeat.Metadata,
+		})
+	}
+	for _, lease := range detail.Leases {
+		response.Leases = append(response.Leases, buildLeaseResponse(lease))
+	}
+	return response
+}
+
 func buildLeaseRecoverResponse(record project.Record, leases []project.LeaseRecord) leaseRecoverResponse {
 	response := leaseRecoverResponse{
 		Project: buildProjectRecordResponse(record),
@@ -10219,6 +10824,7 @@ func buildLeaseResponse(lease project.LeaseRecord) leaseResponse {
 func buildWorkflowVersionResponse(version project.WorkflowVersion) workflowVersionResponse {
 	response := workflowVersionResponse{
 		ID:              version.ID,
+		ProjectID:       version.ProjectID,
 		DisplayLabel:    version.DisplayLabel,
 		VersionKind:     version.VersionKind,
 		LifecycleStatus: version.LifecycleStatus,

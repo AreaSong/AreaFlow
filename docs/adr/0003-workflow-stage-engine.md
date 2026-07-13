@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Phase 0 planning.
+Accepted. 当前实现仍采用通用 stage engine 与 workflow profile。
 
 ## Decision
 

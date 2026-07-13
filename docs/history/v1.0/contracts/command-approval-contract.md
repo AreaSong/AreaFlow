@@ -4,7 +4,7 @@
 
 本文定义 AreaFlow 的统一写入口合同。它补充
 [`api-surface.md`](./api-surface.md)、[`security-permissions.md`](./security-permissions.md)、
-[`data-model-v1.md`](../../../architecture/data-model-v1.md) 和 [`worker-scheduling-contract.md`](../../../architecture/worker-scheduling-contract.md)。
+[`data-model-v1.md`](../contracts/data-model-v1.md) 和 [`worker-scheduling-contract.md`](../contracts/worker-scheduling-contract.md)。
 
 目标是确保 CLI、Web、Desktop、Worker 和未来 plugin 都不能绕过同一套 permission、gate、approval、
 audit 和 rollback 语义。Query、preview、readiness 和 gate 可以解释状态；只有受保护 Command API

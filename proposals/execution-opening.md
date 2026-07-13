@@ -5,9 +5,9 @@
 ## 定位
 
 本文定义 AreaFlow 从只读 preview 逐步打开真实 execution 的开闸策略。它补充
-[`execution-model.md`](../docs/architecture/execution-model.md)、[`v0.5-runner-preview-contract.md`](../docs/history/v1.0/contracts/v0.5-runner-preview-contract.md)、
+[`execution-model.md`](../docs/concepts/execution-model.md)、[`v0.5-runner-preview-contract.md`](../docs/history/v1.0/contracts/v0.5-runner-preview-contract.md)、
 [`v0.6-worker-beta-contract.md`](../docs/history/v1.0/contracts/v0.6-worker-beta-contract.md)、
-[`security-permissions.md`](../docs/history/v1.0/contracts/security-permissions.md) 和
+[`security.md`](../docs/architecture/security.md) 和
 [`../migration/areamatrix-workflow-migration.md`](../docs/history/v1.0/migrations/areamatrix-workflow-migration.md)，回答：
 
 ```text

@@ -14,19 +14,21 @@ import (
 const sourceAlignmentBindingContractVersion = "E1_design_source_alignment:v1"
 
 var sourceAlignmentProofStaticSourcePaths = []string{
-	"docs/product/master-plan.md",
-	"docs/product/platform-blueprint.md",
-	"docs/product/phase-backlog.md",
-	"docs/product/roadmap.md",
-	"docs/milestones/README.md",
-	"tasks/backlog/0-100-platform-backlog.md",
-	"docs/development/task-backlog-status-audit.md",
-	"docs/development/implementation-gap-audit.md",
+	"README.md",
+	"docs/README.md",
+	"docs/roadmap.md",
+	"governance/README.md",
 }
 
 var sourceAlignmentProofSourceGlobs = []string{
+	"docs/adr/*.md",
 	"docs/architecture/*.md",
-	"docs/migration/*.md",
+	"docs/concepts/*.md",
+	"docs/getting-started/*.md",
+	"docs/guides/web/*.md",
+	"docs/operations/*.md",
+	"docs/reference/*.md",
+	"governance/*/*.md",
 }
 
 var sourceAlignmentBindingComparisonKeys = []string{
@@ -85,9 +87,9 @@ func sourceAlignmentLooksLikeAreaFlowRoot(dir string) bool {
 		return false
 	}
 	for _, path := range []string{
-		"docs/product/master-plan.md",
-		"docs/architecture/completion-audit-contract.md",
-		"tasks/backlog/0-100-platform-backlog.md",
+		"README.md",
+		"docs/README.md",
+		"docs/architecture/overview.md",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
 			return false

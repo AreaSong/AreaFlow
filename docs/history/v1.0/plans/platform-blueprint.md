@@ -27,13 +27,13 @@ v0.6 Worker Beta 的 worker lifecycle、lease、dry-run run-once、scoped execut
 v1.x 高风险真实 apply 的统一开闸阶梯见
 [`../architecture/high-risk-apply-ladder.md`](../../../../proposals/high-risk-apply.md)。
 运维、部署、可观测性、support bundle、telemetry、upgrade 和 rollback 边界见
-[`../architecture/operations-deployment-observability-boundary.md`](../../../architecture/operations-deployment-observability-boundary.md)。
+[`../architecture/operations-deployment-observability-boundary.md`](../contracts/operations-deployment-observability-boundary.md)。
 最终 completion audit、release packaging preview 和 100% evidence 聚合边界见
-[`../architecture/completion-audit-contract.md`](../../../architecture/completion-audit-contract.md)。
+[`../architecture/completion-audit-contract.md`](../contracts/completion-audit-contract.md)。
 Plugin / marketplace seed 与未来 plugin execution 的边界见
 [`../architecture/plugin-marketplace-boundary.md`](../../../../proposals/plugin-marketplace.md)。
 Object artifact store、archive copy/upload、retention-aware GC 和 delete apply 的边界见
-[`../architecture/object-artifact-retention-contract.md`](../../../architecture/object-artifact-retention-contract.md)。
+[`../architecture/object-artifact-retention-contract.md`](../contracts/object-artifact-retention-contract.md)。
 
 ## 长期技术栈
 

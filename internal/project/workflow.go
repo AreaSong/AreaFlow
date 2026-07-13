@@ -346,6 +346,7 @@ type ArtifactRecord struct {
 	ID                int64
 	ProjectID         int64
 	WorkflowVersionID int64
+	RunID             int64
 	WorkflowItemID    int64
 	ArtifactType      string
 	StorageBackend    string
@@ -3274,6 +3275,33 @@ func scanArtifactRecord(row scanner) (ArtifactRecord, error) {
 	}
 	if workflowItemID.Valid {
 		record.WorkflowItemID = workflowItemID.Int64
+	}
+	return record, nil
+}
+
+func scanArtifactRecordWithRun(row scanner) (ArtifactRecord, error) {
+	var record ArtifactRecord
+	var raw []byte
+	if err := row.Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.WorkflowVersionID,
+		&record.RunID,
+		&record.WorkflowItemID,
+		&record.ArtifactType,
+		&record.StorageBackend,
+		&record.URI,
+		&record.SourcePath,
+		&record.SHA256,
+		&record.SizeBytes,
+		&record.ContentType,
+		&raw,
+		&record.CreatedAt,
+	); err != nil {
+		return ArtifactRecord{}, err
+	}
+	if err := json.Unmarshal(raw, &record.Metadata); err != nil {
+		return ArtifactRecord{}, fmt.Errorf("parse artifact metadata: %w", err)
 	}
 	return record, nil
 }

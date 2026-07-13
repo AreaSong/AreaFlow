@@ -46,7 +46,7 @@ CLI / Web / Desktop
 
 AreaFlow 默认只读。读取或写入被管理项目时，必须同时服从 project config、capability、路径规则、gate、approval 和 audit。AreaFlow 不拥有项目源码和产品文档的语义。
 
-详细配置见 [project-config.md](../history/v1.0/contracts/project-config.md)。
+详细配置见 [Project Configuration](../reference/configuration.md)。
 
 ## Adapter 与 Profile
 

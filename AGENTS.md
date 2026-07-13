@@ -3,7 +3,7 @@
 ## 定位
 
 - 本仓库是 AreaFlow：AI 开发项目管理平台。
-- AreaFlow 最终负责 workflow lifecycle、版本规划、任务编排、执行记录、worker 调度、artifact 索引和多项目状态。
+- AreaFlow 负责 workflow lifecycle、版本规划、任务编排、执行记录、worker 调度、artifact 索引和多项目状态。
 - AreaMatrix 是第一个 dogfooding 项目，不是 AreaFlow 的子目录，也不是 AreaFlow 的产品源事实。
 
 ## 语言与表达
@@ -14,17 +14,19 @@
 
 ## 源事实
 
-- 产品定位与路线：`docs/product/**`。
-- 架构、数据模型、生命周期：`docs/architecture/**`。
+- 当前产品事实与文档导航：`docs/README.md`、`docs/concepts/**`、`docs/guides/**`、`docs/reference/**`。
+- 架构、数据模型和安全不变量：`docs/architecture/**`。
 - 关键技术决策：`docs/adr/**`。
-- AreaMatrix dogfooding 契约：`docs/dogfood/areamatrix-contract.md`。
-- AreaMatrix workflow 迁移路线：`docs/migration/areamatrix-workflow-migration.md`。
+- 当前 AreaMatrix adapter 契约：`docs/reference/adapters/areamatrix.md`。
+- 尚未实现的方向：`docs/roadmap.md` 与 `proposals/**`。
+- 阶段计划、合同、迁移和 evidence：`docs/history/**`，仅用于历史追溯。
 - 内置 workflow profile 和模板资料：`workflow/**`。
 - 治理、安全、权限和 adapter 边界：`governance/**`。
 
 ## 工作原则
 
-- Phase 0 是设计基线阶段：先文档、后代码。
+- 代码、数据库 migration、API/CLI 契约、页面行为和长期文档必须保持一致；不能用计划或文案替代实现与验证。
+- `docs/**` 默认只描述当前真实可用能力；未来设计进入 roadmap/proposals，阶段材料进入 history。
 - 不把 AreaMatrix 的历史执行状态、`progress.json`、task-loop logs 或 release evidence 直接搬入 AreaFlow。
 - AreaFlow 对被管理项目默认只读；任何写入必须由 project config 显式授权。
 - PostgreSQL 是 AreaFlow 的主状态源事实；文件用于配置、artifact 原文和审计导出。
@@ -34,14 +36,14 @@
 ## AreaMatrix 边界
 
 - AreaMatrix 目前仍拥有 `docs/**`、源代码、项目治理规则、发布证据和用户文件安全边界。
-- AreaFlow 最终接管 workflow/task-loop 主能力；迁移顺序是 Import -> Mirror -> Shadow -> Authoring Cutover -> Execution Beta -> Execution Cutover -> Archive -> Shim Retirement。
-- v0.1 只做 Import + Status Mirror，不执行任务、不写代码、不接管 workflow。
-- AreaMatrix 最终只保留粗略进度入口，例如 `workflow/README.md` 和 `.areaflow/status.json`。
+- AreaFlow 通过 AreaMatrix adapter/profile 管理导入、状态投影、workflow、run、worker 和 artifact metadata；不得把 AreaMatrix 特例硬编码进 core。
+- AreaMatrix 的迁移过程已经归档到 `docs/history/v1.0/migrations/**`，不能作为当前产品能力说明。
+- `workflow/README.md` 和 `.areaflow/status.json` 是 AreaMatrix 的粗略投影入口，不是 AreaFlow 的主状态源。
 
 ## 禁止
 
-- 未经设计文档确认就创建执行 runner、worker 或 AI engine 调用。
+- 未经独立设计、安全评审和明确批准就开放通用 AI engine execution、remote worker 或高风险 apply。
 - 未经授权写入被管理项目代码、`workflow/versions/**/execution/**`、`progress.json`、checkpoint、logs 或用户文件。
 - 把 AreaMatrix 当前 workflow 原样复制为 AreaFlow 的硬编码流程。
-- 在 v0.1 引入 SQLite 主状态 fallback。
-- 在 v0.1 引入 Web/Desktop 实现或真实 task execution。
+- 引入 SQLite 主状态 fallback，或让 Web/Desktop/worker 绕过 AreaFlow API 和 Command/approval/audit 边界。
+- 把 users、teams、tokens、webhooks、secret resolve、remote workers、plugin execution 等预留数据结构写成已开放能力。

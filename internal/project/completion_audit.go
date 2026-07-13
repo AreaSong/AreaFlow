@@ -510,11 +510,11 @@ func completionDesignSourceAlignmentItem(parts CompletionAuditParts) CompletionA
 		Status:   status,
 		Message:  message,
 		EvidenceRefs: []string{
-			"docs/product/master-plan.md",
-			"docs/product/platform-blueprint.md",
-			"docs/product/phase-backlog.md",
-			"docs/product/roadmap.md",
-			"docs/architecture/completion-audit-contract.md",
+			"docs/history/v1.0/plans/master-plan.md",
+			"docs/history/v1.0/plans/platform-blueprint.md",
+			"docs/history/v1.0/plans/phase-backlog.md",
+			"docs/roadmap.md",
+			"docs/history/v1.0/contracts/completion-audit-contract.md",
 		},
 		RequiredEvidence: []string{
 			"source alignment proof covers 0-100% phases",
@@ -610,8 +610,8 @@ func completionTaskMatrixItem(parts CompletionAuditParts) CompletionAuditItem {
 		Status:   status,
 		Message:  message,
 		EvidenceRefs: []string{
-			"tasks/backlog/0-100-platform-backlog.md",
-			"docs/development/task-backlog-status-audit.md",
+			"docs/history/v1.0/plans/task-backlog.md",
+			"docs/history/v1.0/evidence/task-backlog-status-audit.md",
 		},
 		RequiredEvidence: []string{
 			"no v0-v1.0 task remains planned",
@@ -675,9 +675,9 @@ func completionCommandAPISmokeItem(parts CompletionAuditParts) CompletionAuditIt
 		Status:   status,
 		Message:  message,
 		EvidenceRefs: []string{
-			"docs/development/v1-stable-fixture-evidence.md",
-			"docs/development/multi-project-isolation-evidence.md",
-			"docs/development/completion-audit-evidence.md",
+			"docs/history/v1.0/evidence/v1-stable-fixture-evidence.md",
+			"docs/history/v1.0/evidence/multi-project-isolation-evidence.md",
+			"docs/history/v1.0/evidence/completion-audit-evidence.md",
 		},
 		RequiredEvidence: []string{
 			"go test ./...",
@@ -967,8 +967,8 @@ func completionAreaMatrixDogfoodItem(parts CompletionAuditParts) CompletionAudit
 		Status:   status,
 		Message:  message,
 		EvidenceRefs: []string{
-			"docs/migration/areamatrix-workflow-migration.md",
-			"docs/migration/areamatrix-execution-cutover-boundary.md",
+			"docs/history/v1.0/migrations/areamatrix-workflow-migration.md",
+			"docs/history/v1.0/migrations/areamatrix-execution-cutover-boundary.md",
 			"GET /api/v1/projects/areamatrix/execution-cutover-readiness",
 		},
 		RequiredEvidence: []string{
@@ -1224,8 +1224,8 @@ func completionBackupRestoreArtifactItem(parts CompletionAuditParts) CompletionA
 			"GET /api/v1/backup/manifest",
 			"GET /api/v1/backup/restore-plan",
 			"GET /api/v1/artifacts/integrity",
-			"docs/architecture/artifact-backup-restore-contract.md",
-			"docs/architecture/object-artifact-retention-contract.md",
+			"docs/history/v1.0/contracts/artifact-backup-restore-contract.md",
+			"docs/history/v1.0/contracts/object-artifact-retention-contract.md",
 		},
 		RequiredEvidence: []string{
 			"backup manifest covers PostgreSQL metadata and AreaFlow-owned artifact metadata",
@@ -1306,8 +1306,8 @@ func completionOperationsReadinessItem(parts CompletionAuditParts) CompletionAud
 				"GET /api/v1/ops/migration-ledger-readiness",
 				"areaflow ops readiness --json",
 				"areaflow support bundle-preview --json",
-				"docs/architecture/operations-deployment-observability-boundary.md",
-				"docs/milestones/v0.9-desktop-shell.md",
+				"docs/operations/deployment.md",
+				"docs/history/v1.0/milestones/v0.9-desktop-shell.md",
 			},
 			RequiredEvidence: []string{
 				"install / migrate / start / project register smoke",
@@ -1338,8 +1338,8 @@ func completionOperationsReadinessItem(parts CompletionAuditParts) CompletionAud
 		EvidenceRefs: []string{
 			"GET /api/v1/service/status",
 			"GET /api/v1/ops/readiness",
-			"docs/architecture/operations-deployment-observability-boundary.md",
-			"docs/milestones/v0.9-desktop-shell.md",
+			"docs/operations/deployment.md",
+			"docs/history/v1.0/milestones/v0.9-desktop-shell.md",
 		},
 		RequiredEvidence: []string{
 			"install / migrate / start / project register smoke",
@@ -1513,7 +1513,7 @@ func completionSecurityPermissionIsolationItem(parts CompletionAuditParts) Compl
 			"GET /api/v1/security/boundary-readiness",
 			"GET /api/v1/permissions/doctor",
 			"GET /api/v1/audit/coverage",
-			"docs/development/multi-project-isolation-evidence.md",
+			"docs/history/v1.0/evidence/multi-project-isolation-evidence.md",
 		},
 		RequiredEvidence: []string{
 			"project_key isolation covers workflow, run, lease, artifact, secret and audit",
@@ -1602,8 +1602,8 @@ func completionProtectedPathProofItem(parts CompletionAuditParts) CompletionAudi
 		Status:   status,
 		Message:  message,
 		EvidenceRefs: []string{
-			"docs/architecture/completion-audit-contract.md",
-			"docs/architecture/v1.0-stable-platform-contract.md",
+			"docs/history/v1.0/contracts/completion-audit-contract.md",
+			"docs/history/v1.0/contracts/v1.0-stable-platform-contract.md",
 		},
 		RequiredEvidence: []string{
 			"AreaMatrix protected path git status command has no output, or changes are authorized by completed cross-repo task",

@@ -81,8 +81,8 @@ import sys
 payload = {
     "required_count_contract": "planned/missing_evidence/blocked_v1_required_counts_must_be_zero",
     "source_paths": [
-        "tasks/backlog/0-100-platform-backlog.md",
-        "docs/development/task-backlog-status-audit.md",
+        "docs/history/v1.0/plans/task-backlog.md",
+        "docs/history/v1.0/evidence/task-backlog-status-audit.md",
     ],
     "task_backlog_hash": sys.argv[1],
     "task_status_audit_hash": sys.argv[2],
@@ -237,8 +237,8 @@ task_matrix_fact_args=()
 for fact in "${task_matrix_facts[@]}"; do
   task_matrix_fact_args+=(--fact "${fact}")
 done
-task_backlog_hash="$(shasum -a 256 tasks/backlog/0-100-platform-backlog.md | awk '{print $1}')"
-task_status_audit_hash="$(shasum -a 256 docs/development/task-backlog-status-audit.md | awk '{print $1}')"
+task_backlog_hash="$(shasum -a 256 docs/history/v1.0/plans/task-backlog.md | awk '{print $1}')"
+task_status_audit_hash="$(shasum -a 256 docs/history/v1.0/evidence/task-backlog-status-audit.md | awk '{print $1}')"
 task_matrix_source_set_hash_value="$(task_matrix_source_set_hash "${task_backlog_hash}" "${task_status_audit_hash}")"
 task_matrix_binding_args=(
   --source-set-hash "${task_matrix_source_set_hash_value}"

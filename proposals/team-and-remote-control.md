@@ -6,8 +6,8 @@
 
 本文定义 AreaFlow Team Console、远程控制台和多用户控制面的边界。它补充
 [`auth-team-secret-boundary.md`](./auth-team-secret.md)、
-[`security-permissions.md`](../docs/history/v1.0/contracts/security-permissions.md)、
-[`api-surface.md`](../docs/history/v1.0/contracts/api-surface.md) 和
+[`security.md`](../docs/architecture/security.md)、
+[`api.md`](../docs/reference/api.md) 和
 [`high-risk-apply-ladder.md`](./high-risk-apply.md)。
 
 Team Console 是控制面，不是能力放大器。它可以把已有 Query API、Command API、approval、audit、

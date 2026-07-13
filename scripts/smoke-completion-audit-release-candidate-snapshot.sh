@@ -12,7 +12,7 @@ fixture_dir="$(cd "${fixture_dir}" && pwd -P)"
 project_root="${fixture_dir}/areamatrix-root"
 artifact_root="${fixture_dir}/artifact-store"
 config_path="${fixture_dir}/areaflow.yaml"
-evidence_root="docs/development/real-release-candidate-evidence.md"
+evidence_root="docs/history/v1.0/evidence/real-release-candidate-evidence.md"
 review_flags=(--review-decision approved --reviewed-by release-owner --reviewed-at 2026-07-04T12:00:00Z)
 real_areamatrix_status="/Users/as/Ai-Project/project/AreaMatrix/.areaflow/status.json"
 real_areamatrix_readme="/Users/as/Ai-Project/project/AreaMatrix/workflow/README.md"
@@ -154,8 +154,8 @@ import sys
 payload = {
     "required_count_contract": "planned/missing_evidence/blocked_v1_required_counts_must_be_zero",
     "source_paths": [
-        "tasks/backlog/0-100-platform-backlog.md",
-        "docs/development/task-backlog-status-audit.md",
+        "docs/history/v1.0/plans/task-backlog.md",
+        "docs/history/v1.0/evidence/task-backlog-status-audit.md",
     ],
     "task_backlog_hash": sys.argv[1],
     "task_status_audit_hash": sys.argv[2],
@@ -481,8 +481,8 @@ task_matrix_fact_args=()
 for fact in "${task_matrix_facts[@]}"; do
   task_matrix_fact_args+=(--fact "${fact}")
 done
-task_backlog_hash="$(shasum -a 256 tasks/backlog/0-100-platform-backlog.md | awk '{print $1}')"
-task_status_audit_hash="$(shasum -a 256 docs/development/task-backlog-status-audit.md | awk '{print $1}')"
+task_backlog_hash="$(shasum -a 256 docs/history/v1.0/plans/task-backlog.md | awk '{print $1}')"
+task_status_audit_hash="$(shasum -a 256 docs/history/v1.0/evidence/task-backlog-status-audit.md | awk '{print $1}')"
 task_matrix_source_set_hash_value="$(task_matrix_source_set_hash "${task_backlog_hash}" "${task_status_audit_hash}")"
 task_matrix_binding_args=(
   --source-set-hash "${task_matrix_source_set_hash_value}"

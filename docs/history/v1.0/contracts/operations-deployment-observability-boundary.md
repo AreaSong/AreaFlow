@@ -8,8 +8,8 @@ support bundle、diagnostics、Admin API、telemetry 和 upgrade / rollback。
 
 v1.0 的目标是证明 AreaFlow 可被本机稳定运行和诊断，不是打开托管升级、远程运维控制或自动导出用户数据。
 远程 Team Console / command console 的产品边界见
-[`team-remote-control-boundary.md`](../../proposals/team-and-remote-control.md)；auth、API token、secret 和 remote
-worker credential 的 R4 边界见 [`auth-team-secret-boundary.md`](../../proposals/auth-team-secret.md)。
+[`team-remote-control-boundary.md`](../../../../proposals/team-and-remote-control.md)；auth、API token、secret 和 remote
+worker credential 的 R4 边界见 [`auth-team-secret-boundary.md`](../../../../proposals/auth-team-secret.md)。
 
 ## Current Boundary
 

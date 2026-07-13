@@ -3,11 +3,11 @@
 ## 定位
 
 本文定义 AreaFlow v1.0 的 release readiness、release exception、final gate、evidence bundle 和
-publish preview 链路。它补充 [`api-surface.md`](../history/v1.0/contracts/api-surface.md)、
-[`command-approval-contract.md`](../history/v1.0/contracts/command-approval-contract.md)、
+publish preview 链路。它补充 [`api.md`](../../../reference/api.md)、
+[`commands-and-approvals.md`](../../../concepts/commands-and-approvals.md)、
 [`artifact-backup-restore-contract.md`](artifact-backup-restore-contract.md) 和
-[`auth-team-secret-boundary.md`](../../proposals/auth-team-secret.md)、
-[`plugin-marketplace-boundary.md`](../../proposals/plugin-marketplace.md)。
+[`auth-team-secret-boundary.md`](../../../../proposals/auth-team-secret.md)、
+[`plugin-marketplace-boundary.md`](../../../../proposals/plugin-marketplace.md)。
 0-100% 最终完成审计、release packaging preview 与 completion evidence 的整体门槛见
 [`completion-audit-contract.md`](completion-audit-contract.md)。
 
@@ -102,7 +102,7 @@ metadata_only_history:
 future_only_gap:
   审计或能力缺口对应尚未启用的 v1.x 能力，例如真实 secret resolve、remote worker、restore apply、
   publish apply 或未知 plugin execution。Plugin marketplace 的 v1.0 seed / manifest draft / conformance
-  边界见 [`plugin-marketplace-boundary.md`](../../proposals/plugin-marketplace.md)。
+  边界见 [`plugin-marketplace-boundary.md`](../../../../proposals/plugin-marketplace.md)。
 
 archive_exception:
   project_reference / external_project artifact 作为历史归档引用保留，由 archive owner 接受 metadata-only

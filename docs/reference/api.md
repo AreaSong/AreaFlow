@@ -21,12 +21,57 @@ GET /workers
 GET /artifacts
 ```
 
-`workflows`、`runs`、`workers` 和 `artifacts` 支持：
+`projects` 当前返回未归档项目列表，不提供 cursor 或写入操作。其余四个集合返回：
 
-- `project_key`：限定项目。
-- `limit`：正整数，最大 200。
+```json
+{
+  "count": 50,
+  "next_cursor": "opaque-value",
+  "workflows|runs|workers|artifacts": []
+}
+```
 
-集合条目显式包含 `project`，run 集合还包含 `workflow_version`。
+`limit` 默认 50，最大 200。存在下一页时响应包含 `next_cursor`；客户端应把该值原样作为下一次请求的 `cursor`，不得解析、构造或跨集合复用。无效 cursor 返回 `400`。
+
+集合使用稳定的降序键集分页：workflow 按 `updated_at, id`，run 按 `started_at, id`，worker 按 `updated_at, id`，artifact 按 `created_at, id`。
+
+### Workflow 集合
+
+```text
+GET /workflows?project_key=&status=&kind=&import_mode=&cursor=&limit=
+```
+
+- `status` 匹配 lifecycle status。
+- `kind` 匹配 version kind。
+- `import_mode` 匹配 imported/authored 等导入模式。
+
+### Run 集合
+
+```text
+GET /runs?project_key=&status=&kind=&type=&dry_run=&cursor=&limit=
+```
+
+- `kind` 匹配 run kind。
+- `type` 匹配 run type。
+- `dry_run` 只接受布尔值。
+
+### Worker 集合
+
+```text
+GET /workers?project_key=&worker_key=&status=&type=&capability=&cursor=&limit=
+```
+
+`worker_key` 使用精确匹配，供稳定详情深链解析；`capability` 要求 worker capabilities 包含指定值。
+
+### Artifact 集合
+
+```text
+GET /artifacts?project_key=&type=&storage_backend=&sha256=&run_id=&workflow_version_id=&cursor=&limit=
+```
+
+`run_id` 和 `workflow_version_id` 必须是正整数。
+
+所有集合条目显式包含 `project`。Workflow 条目包含 `workflow_version`；Run 条目包含 `run` 和关联的 `workflow_version`；Artifact 通过 `project_id`、`workflow_version_id`、`run_id` 和 `workflow_item_id` 表达关联。
 
 ## Project
 
@@ -64,6 +109,10 @@ GET  /projects/{project_key}/workflow-versions/{version}/residuals
 
 ```text
 GET  /runs/{run_id}
+GET  /runs/{run_id}/tasks
+GET  /runs/{run_id}/tasks/{task_id}
+GET  /runs/{run_id}/attempts
+GET  /runs/{run_id}/attempts/{attempt_id}
 GET  /runs/{run_id}/events
 GET  /runs/{run_id}/events/stream
 GET  /runs/{run_id}/execution-approval-gate
@@ -73,11 +122,16 @@ POST /runs/{run_id}/drain
 POST /runs/{run_id}/cancel
 ```
 
+Run Task 和 Attempt 列表按 Run 隔离，详情路由同时校验 `run_id` 与子资源 ID。响应包含 `project_id`、`workflow_version_id` 和 `run_id`；Attempt 还可通过 `run_task_id` 关联 Task。这些子资源列表当前不支持 cursor pagination。
+
+全局 Run 详情及其子资源可以使用 `project_key` query 作为 visibility guard；项目不匹配时返回 `404`。
+
 run control 更新 AreaFlow 状态并写入 event/audit。它不隐式执行任意项目命令或 AI engine。
 
 ## Worker
 
 ```text
+GET  /workers/{worker_id}?project_key=&limit=
 GET  /projects/{project_key}/workers
 POST /projects/{project_key}/workers
 POST /projects/{project_key}/workers/{worker_key}/heartbeat
@@ -88,6 +142,8 @@ POST /projects/{project_key}/workers/{worker_key}/run-once
 GET  /worker-pool/summary
 GET  /worker-pool/schedule-preview
 ```
+
+Worker 详情返回 `worker`、最近的 `heartbeats` 和最近的 `leases`。`limit` 同时限制两类历史，默认 50、最大 200；两类历史当前没有独立 cursor。可选 `project_key` 用作 visibility guard。
 
 ## Artifact
 
@@ -103,7 +159,7 @@ Archive preview 不执行 artifact copy、delete、upload 或 GC。
 ## Audit 与 Operations
 
 ```text
-GET /audit-events
+GET /audit-events?project_key=&actor_id=&action=&decision=&resource_type=&resource=&from=&to=&cursor=&limit=
 GET /audit/coverage
 GET /permissions/doctor
 GET /conformance
@@ -116,6 +172,8 @@ GET /release/readiness
 GET /release/final-gate
 GET /completion-audit
 ```
+
+Audit events 按 `created_at, id` 降序使用 opaque cursor pagination，`limit` 默认 50、最大 200。`actor_id` 必须是正整数；`action`、`decision`、`resource_type` 和 `resource` 使用精确匹配；`from`、`to` 使用 RFC3339，并分别包含边界时间。响应返回 `count` 和可选的 `next_cursor`。
 
 Operations 中的 manifest、plan、preview、readiness 和 gate 不代表外部操作已执行。
 

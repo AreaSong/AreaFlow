@@ -4,8 +4,8 @@ AreaMatrix profile 是 AreaFlow 的第一个内置 workflow profile。它把 Are
 
 声明式 profile 源事实见 [`profile.yaml`](profile.yaml)。Go checker 负责执行 gate、transition
 和 artifact 校验；PostgreSQL 记录每个 workflow version 绑定的 profile version/hash。
-AreaFlow-authored version 的创建、skeleton、gate、transition preview 和 approval record 边界见
-[`../../../docs/architecture/v0.3-version-authoring-contract.md`](../../../docs/history/v1.0/contracts/v0.3-version-authoring-contract.md)。
+AreaFlow-authored version 的 profile binding、gate、transition preview 和 approval 语义见
+[`../../../docs/concepts/workflow-lifecycle.md`](../../../docs/concepts/workflow-lifecycle.md)。
 
 ## Stages
 

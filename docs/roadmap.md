@@ -2,13 +2,10 @@
 
 Roadmap 只记录尚未成为当前产品事实的方向。已完成的阶段、milestone 和实施 evidence 保存在 `docs/history/**`，不在本文件重复维护。
 
-## 资源查询契约
+## 查询契约补齐
 
-- 为 workflows、runs、workers 和 artifacts 提供全局集合 endpoint。
-- 增加稳定过滤、排序和 cursor pagination。
-- 补齐 run、artifact 的 project/run 关联字段。
-- 为 worker heartbeat、lease、task 和 attempt 提供独立详情资源。
-- 为 audit 增加 actor、action、decision、resource 和时间过滤。
+- 为 Run Task、Attempt、Worker heartbeat 和 Lease 等子资源增加独立 cursor，而不是只能返回完整列表或共享 history limit。
+- 评估 Projects 集合的过滤和 cursor 契约，保持与其他全局资源一致的错误和分页语义。
 
 ## Web command contract
 

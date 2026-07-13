@@ -142,7 +142,7 @@ Inputs:
 
 Deliverables:
 
-- [`../../docs/architecture/operations-deployment-observability-boundary.md`](../../../architecture/operations-deployment-observability-boundary.md)
+- [`../../docs/architecture/operations-deployment-observability-boundary.md`](../contracts/operations-deployment-observability-boundary.md)
   运维、部署和可观测性边界合同。
 - v1.0 只允许 local bootstrap、service status、health/readiness/doctor、metadata-only support bundle preview
   和 local-only telemetry。

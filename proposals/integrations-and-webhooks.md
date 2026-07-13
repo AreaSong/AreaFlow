@@ -6,10 +6,10 @@
 
 本文定义 AreaFlow 外部系统接入、webhook、third-party callback、GitHub / external API connector、
 notification provider 和未来多 API 接入的安全边界。它补充
-[`api-surface.md`](../docs/history/v1.0/contracts/api-surface.md)、
-[`security-permissions.md`](../docs/history/v1.0/contracts/security-permissions.md)、
+[`api.md`](../docs/reference/api.md)、
+[`security.md`](../docs/architecture/security.md)、
 [`auth-team-secret-boundary.md`](./auth-team-secret.md)、
-[`command-approval-contract.md`](../docs/history/v1.0/contracts/command-approval-contract.md) 和
+[`commands-and-approvals.md`](../docs/concepts/commands-and-approvals.md) 和
 [`plugin-marketplace-boundary.md`](./plugin-marketplace.md)。
 
 Integration 是受治理的外部效果面，不是插件、worker 或 Web UI 的旁路。任何 external API call、

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Phase 0 planning.
+Accepted. PostgreSQL 仍是当前主状态源事实。
 
 ## Decision
 

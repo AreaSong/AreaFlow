@@ -767,8 +767,8 @@ func (s Store) GetArtifact(ctx context.Context, artifactID int64) (ArtifactRecor
 	if artifactID <= 0 {
 		return ArtifactRecord{}, fmt.Errorf("artifact id is required")
 	}
-	record, err := scanArtifactRecord(s.pool.QueryRow(ctx, `
-SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_item_id, 0),
+	record, err := scanArtifactRecordWithRun(s.pool.QueryRow(ctx, `
+SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(run_id, 0), COALESCE(workflow_item_id, 0),
        artifact_type, storage_backend, uri, COALESCE(source_path, ''), COALESCE(sha256, ''),
        COALESCE(size_bytes, 0), COALESCE(content_type, ''), metadata, created_at
 FROM artifacts
@@ -829,7 +829,7 @@ func (s Store) ListProjectArtifacts(ctx context.Context, record Record, limit in
 		limit = 20
 	}
 	rows, err := s.pool.Query(ctx, `
-SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_item_id, 0),
+SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(run_id, 0), COALESCE(workflow_item_id, 0),
        artifact_type, storage_backend, uri, COALESCE(source_path, ''), COALESCE(sha256, ''),
        COALESCE(size_bytes, 0), COALESCE(content_type, ''), metadata, created_at
 FROM artifacts
@@ -845,7 +845,7 @@ LIMIT $2`,
 	defer rows.Close()
 	artifacts := []ArtifactRecord{}
 	for rows.Next() {
-		record, err := scanArtifactRecord(rows)
+		record, err := scanArtifactRecordWithRun(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -868,7 +868,7 @@ func (s Store) ListWorkflowVersionArtifacts(ctx context.Context, record Record, 
 		limit = 20
 	}
 	rows, err := s.pool.Query(ctx, `
-SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_item_id, 0),
+SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(run_id, 0), COALESCE(workflow_item_id, 0),
        artifact_type, storage_backend, uri, COALESCE(source_path, ''), COALESCE(sha256, ''),
        COALESCE(size_bytes, 0), COALESCE(content_type, ''), metadata, created_at
 FROM artifacts
@@ -886,7 +886,7 @@ LIMIT $3`,
 	defer rows.Close()
 	artifacts := []ArtifactRecord{}
 	for rows.Next() {
-		record, err := scanArtifactRecord(rows)
+		record, err := scanArtifactRecordWithRun(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -900,7 +900,7 @@ LIMIT $3`,
 
 func (s Store) listRunArtifacts(ctx context.Context, runID int64) ([]ArtifactRecord, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_item_id, 0),
+SELECT id, project_id, COALESCE(workflow_version_id, 0), COALESCE(run_id, 0), COALESCE(workflow_item_id, 0),
        artifact_type, storage_backend, uri, COALESCE(source_path, ''), COALESCE(sha256, ''),
        COALESCE(size_bytes, 0), COALESCE(content_type, ''), metadata, created_at
 FROM artifacts
@@ -914,7 +914,7 @@ ORDER BY created_at ASC, id ASC`,
 	defer rows.Close()
 	artifacts := []ArtifactRecord{}
 	for rows.Next() {
-		record, err := scanArtifactRecord(rows)
+		record, err := scanArtifactRecordWithRun(rows)
 		if err != nil {
 			return nil, err
 		}

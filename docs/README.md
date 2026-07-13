@@ -12,10 +12,17 @@
 ## 产品概念
 
 - [产品模型](concepts/product-model.md)
-- [Workflow lifecycle](architecture/workflow-lifecycle.md)
-- [Execution model](architecture/execution-model.md)
-- [项目配置](./history/v1.0/contracts/project-config.md)
-- [权限与安全](./history/v1.0/contracts/security-permissions.md)
+- [Adapter 与 Workflow Profile](concepts/adapter-and-profile.md)
+- [Workflow lifecycle](concepts/workflow-lifecycle.md)
+- [Execution model](concepts/execution-model.md)
+- [Worker scheduling](concepts/worker-scheduling.md)
+- [Artifacts](concepts/artifacts.md)
+- [Command 与 Approval](concepts/commands-and-approvals.md)
+- [项目配置](reference/configuration.md)
+- [权限与安全](architecture/security.md)
+- [数据模型](architecture/data-model.md)
+- [API Reference](reference/api.md)
+- [CLI Reference](reference/cli.md)
 
 ## 使用指南
 
@@ -25,6 +32,12 @@
 ## 维护与运维
 
 - [架构总览](architecture/overview.md)
+- [部署](operations/deployment.md)
+- [可观测性](operations/observability.md)
+- [Backup 与 Restore](operations/backup-and-restore.md)
+- [Support Bundle](operations/support-bundle.md)
+- [Release](operations/release.md)
+- [Completion Audit](operations/completion-audit.md)
 - [开发环境](development/setup.md)
 - [ADR](adr/)
 - [治理边界](../governance/README.md)

@@ -63,6 +63,7 @@ export type ProjectReadiness = {
 
 export type WorkflowVersion = {
   id: number;
+  project_id?: number;
   display_label: string;
   version_kind: string;
   lifecycle_status: string;
@@ -77,6 +78,12 @@ export type WorkflowVersion = {
 export type WorkflowVersionListResponse = {
   project: ProjectRecord;
   workflow_versions: WorkflowVersion[];
+};
+
+export type WorkflowCollectionResponse = {
+  workflows: Array<{ project: ProjectRecord; workflow_version: WorkflowVersion }>;
+  count: number;
+  next_cursor?: string;
 };
 
 export type WorkflowItem = {
@@ -112,7 +119,9 @@ export type WorkflowStagesResponse = {
 
 export type ArtifactRecord = {
   id: number;
+  project_id?: number;
   workflow_version_id: number;
+  run_id?: number;
   workflow_item_id?: number;
   artifact_type: string;
   storage_backend: string;
@@ -179,6 +188,7 @@ export type ApprovalRecordsResponse = {
 
 export type RunRecord = {
   id: number;
+  project_id?: number;
   workflow_version_id: number;
   run_type: string;
   run_kind: string;
@@ -194,6 +204,7 @@ export type RunRecord = {
 
 export type RunTaskRecord = {
   id: number;
+  project_id?: number;
   workflow_version_id: number;
   workflow_item_id?: number;
   run_id: number;
@@ -209,6 +220,7 @@ export type RunTaskRecord = {
 
 export type RunAttemptRecord = {
   id: number;
+  project_id?: number;
   workflow_version_id: number;
   workflow_item_id?: number;
   run_id: number;
@@ -226,6 +238,15 @@ export type WorkflowVersionRunsResponse = {
   workflow_version: WorkflowVersion;
   runs: RunRecord[];
 };
+
+export type RunCollectionResponse = {
+  runs: Array<{ project: ProjectRecord; workflow_version: WorkflowVersion; run: RunRecord }>;
+  count: number;
+  next_cursor?: string;
+};
+
+export type RunTasksResponse = { run_id: number; tasks: RunTaskRecord[] };
+export type RunAttemptsResponse = { run_id: number; attempts: RunAttemptRecord[] };
 
 export type RunDetailResponse = {
   run: RunRecord;
@@ -255,6 +276,51 @@ export type WorkerRecord = {
 export type WorkerListResponse = {
   project: ProjectRecord;
   workers: WorkerRecord[];
+};
+
+export type WorkerCollectionResponse = {
+  workers: Array<{ project: ProjectRecord; worker: WorkerRecord }>;
+  count: number;
+  next_cursor?: string;
+};
+
+export type ArtifactCollectionResponse = {
+  artifacts: Array<{ project: ProjectRecord; artifact: ArtifactRecord }>;
+  count: number;
+  next_cursor?: string;
+};
+
+export type WorkerHeartbeatRecord = {
+  id: number;
+  project_id: number;
+  worker_id: number;
+  status: string;
+  observed_at: string;
+  metadata: Record<string, unknown>;
+};
+
+export type LeaseRecord = {
+  id: number;
+  project_id: number;
+  run_id?: number;
+  run_task_id?: number;
+  workflow_item_id?: number;
+  worker_id?: number;
+  lease_kind: string;
+  status: string;
+  acquired_at: string;
+  expires_at: string;
+  heartbeat_at?: string;
+  released_at?: string;
+  allowed_capabilities: string[];
+  scope: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+};
+
+export type WorkerDetailResponse = {
+  worker: WorkerRecord;
+  heartbeats: WorkerHeartbeatRecord[];
+  leases: LeaseRecord[];
 };
 
 export type SchedulingPolicy = {
@@ -1301,4 +1367,6 @@ export type AuditEventRecord = {
 export type AuditEventsResponse = {
   project_key?: string;
   audit_events: AuditEventRecord[];
+  count: number;
+  next_cursor?: string;
 };

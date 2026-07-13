@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Phase 0 planning.
+Accepted as the AreaMatrix migration decision. 实施过程已经归档到 `docs/history/v1.0/migrations/**`。
 
 ## Decision
 

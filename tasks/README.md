@@ -7,4 +7,4 @@
 - `done/`：已完成的轻量任务记录。
 - `templates/`：任务记录模板。
 
-历史 0-100 平台 backlog 已归档到 [`../docs/history/v1.0/plans/task-backlog.md`](../docs/history/v1.0/plans/task-backlog.md)。未来产品方向见 [`../docs/product/roadmap.md`](../docs/product/roadmap.md)。
+历史 0-100 平台 backlog 已归档到 [`../docs/history/v1.0/plans/task-backlog.md`](../docs/history/v1.0/plans/task-backlog.md)。未来产品方向见 [`../docs/roadmap.md`](../docs/roadmap.md)。

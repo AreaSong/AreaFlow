@@ -25,6 +25,8 @@ Project / Workflow / Run / Worker / Artifact
 
 Project 是 AreaFlow 的管理边界。它保存项目路径、adapter、workflow profile、默认分支和配置快照。项目配置声明 AreaFlow 可以读取、写入和执行哪些能力。
 
+数据库关系使用稳定 `project_id`，API 路由和用户配置使用稳定 `project_key`。全局资源集合在条目中同时返回 Project 上下文，客户端不应仅靠当前页面选择器推断资源归属。
+
 ## Workflow Version
 
 Workflow Version 是冻结 profile 版本和 hash 的工作流实例。它包含 stage 中的 workflow item，以及 gate、transition preview 和 approval 记录。已标记 immutable 的导入版本不得被静默改写。
@@ -35,6 +37,8 @@ Workflow Version 是冻结 profile 版本和 hash 的工作流实例。它包含
 - Run Task 是 worker 可以领取的最小调度单元。
 - Attempt 表示对一个 task 的一次实际尝试。
 - Lease 绑定 worker 与 task，并提供超时和恢复边界。
+
+Run、Run Task、Attempt 和 Artifact 显式保存 `project_id` 与 `run_id` 等关系。Run 的 Task/Attempt 可通过独立列表和详情资源查询，不需要从聚合摘要反推。
 
 run control 可以改变 AreaFlow 中的 run 状态，但只有明确支持的任务类型和授权链才能产生外部副作用。
 

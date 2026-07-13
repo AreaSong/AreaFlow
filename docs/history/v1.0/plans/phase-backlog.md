@@ -13,7 +13,7 @@
 - [`../development/implementation-gap-audit.md`](../evidence/implementation-gap-audit.md)：当前实现证据和缺口审计。
 - [`../architecture/v0.1-import-mirror-contract.md`](../contracts/v0.1-import-mirror-contract.md)：v0.1
   Import + Status Mirror 最小 CLI、API、读写边界和 v0.2 handoff。
-- [`../architecture/areamatrix-import-scope-contract.md`](../../../architecture/areamatrix-import-scope-contract.md)：
+- [`../architecture/areamatrix-import-scope-contract.md`](../contracts/areamatrix-import-scope-contract.md)：
   AreaMatrix v0.1 只读导入深度、minimum import set 和 artifact metadata 策略。
 - [`../architecture/v0.2-shadow-doctor-contract.md`](../contracts/v0.2-shadow-doctor-contract.md)：v0.2
   Shadow Doctor、Drift Check、readiness、import-diff、verify-bundle 和 native doctor 授权边界。
@@ -29,17 +29,17 @@
   real apply 的统一开闸阶梯。
 - [`../architecture/plugin-marketplace-boundary.md`](../../../../proposals/plugin-marketplace.md)：v1.0
   plugin / marketplace seed、manifest 和 v1.x plugin execution 边界。
-- [`../architecture/release-final-gate-contract.md`](../../../architecture/release-final-gate-contract.md)：v1.0
+- [`../architecture/release-final-gate-contract.md`](../contracts/release-final-gate-contract.md)：v1.0
   release final gate、exception 和 publish preview 的统一合同。
-- [`../architecture/completion-audit-contract.md`](../../../architecture/completion-audit-contract.md)：0-100%
+- [`../architecture/completion-audit-contract.md`](../contracts/completion-audit-contract.md)：0-100%
   完成审计、release packaging preview、dogfood cutover 和 evidence 聚合边界。
-- [`../architecture/object-artifact-retention-contract.md`](../../../architecture/object-artifact-retention-contract.md)：
+- [`../architecture/object-artifact-retention-contract.md`](../contracts/object-artifact-retention-contract.md)：
   object artifact store、archive copy/upload、retention-aware GC 和 delete apply 的 v1.x 边界。
 - [`../architecture/integration-webhook-boundary.md`](../../../../proposals/integrations-and-webhooks.md)：
   external integrations、webhooks、third-party callbacks 和多 API 接入边界。
 - [`../architecture/budget-quota-boundary.md`](../../../../proposals/budget-and-quota.md)：budget、quota、
   rate limit 和 usage metering 边界。
-- [`../architecture/operations-deployment-observability-boundary.md`](../../../architecture/operations-deployment-observability-boundary.md)：
+- [`../architecture/operations-deployment-observability-boundary.md`](../contracts/operations-deployment-observability-boundary.md)：
   install、migration、service lifecycle、diagnostics、support bundle、telemetry、upgrade 和 rollback 边界。
 
 本文回答：
@@ -92,7 +92,7 @@ v1.0:
 Self dogfood 不能绕过 Command API、permission、gate、approval、rollback 和 audit。AreaFlow 自己的源码
 写入不能比 AreaMatrix 更早开闸；AreaFlow release 可以被 AreaFlow preview/gate，但真实 package、
 tag、sign、push、upload 和 publish 放到 v1.x。Release final gate、exception 和 publish preview 的具体
-边界见 [`../architecture/release-final-gate-contract.md`](../../../architecture/release-final-gate-contract.md)。
+边界见 [`../architecture/release-final-gate-contract.md`](../contracts/release-final-gate-contract.md)。
 
 ## 0-100% 阶段总表
 
@@ -181,7 +181,7 @@ AreaFlow 能只读理解 AreaMatrix，并生成粗略状态。
   [`../architecture/data-model-v0.1.md`](../contracts/data-model-v0.1.md)、
   [`../architecture/project-config.md`](../contracts/project-config.md) 一致。
 - AreaMatrix import read envelope、minimum import set、explicit non-imports 和 artifact metadata policy 与
-  [`../architecture/areamatrix-import-scope-contract.md`](../../../architecture/areamatrix-import-scope-contract.md)
+  [`../architecture/areamatrix-import-scope-contract.md`](../contracts/areamatrix-import-scope-contract.md)
   一致。
 - `.areaflow/status.json` 可在允许路径下生成。
 - artifact metadata 有 hash、type、path/URI、project、run/version 关联。
@@ -543,10 +543,10 @@ v1.0 总阶段合同见
 [`../architecture/v1.0-stable-platform-contract.md`](../contracts/v1.0-stable-platform-contract.md)。
 
 本阶段的 release 语义以
-[`../architecture/release-final-gate-contract.md`](../../../architecture/release-final-gate-contract.md) 为准：
+[`../architecture/release-final-gate-contract.md`](../contracts/release-final-gate-contract.md) 为准：
 final gate 是只读 go/no-go，不是 package、restore、exception write 或 publish apply 授权。
 最终 100% 证明以
-[`../architecture/completion-audit-contract.md`](../../../architecture/completion-audit-contract.md) 为准；release
+[`../architecture/completion-audit-contract.md`](../contracts/completion-audit-contract.md) 为准；release
 final gate、package preview、Web/Desktop 展示或 smoke 通过都不能单独声明完成。
 
 ### 做
@@ -697,7 +697,7 @@ backlog 顺序，不是自动 apply 授权。
 | 16 | Team console | 按 [`../architecture/team-remote-control-boundary.md`](../../../../proposals/team-and-remote-control.md) 完成 read-only preview、local auth console、team permission enforcement、remote read-only 和 remote command console 阶梯；role matrix、project scope、token/session revoke 和 audit 完整；不能自动获得 project write / secret / publish / restore。 |
 | 17 | Object artifact store | object verifier、namespace、hash/size、retention、restore dry-run integration、archive copy/upload 和 GC/delete preview/apply 按合同逐级打开。 |
 | 18 | Budget / quota enforcement | 按 [`../architecture/budget-quota-boundary.md`](../../../../proposals/budget-and-quota.md) 完成 metadata/readiness、estimate preview、quota doctor、fixture reservation/charge、project-scoped enforcement、aggregation 和 provider reconciliation 阶梯；engine cost model、rate limit、quota policy、audit 和 override approval 稳定后才执行真实限制，禁止 silent throttling 和重复扣费。 |
-| 19 | Managed ops / upgrade / support export | 按 [`../architecture/operations-deployment-observability-boundary.md`](../../../architecture/operations-deployment-observability-boundary.md) 逐级打开 remote read-only ops、remote ops control、managed upgrade/rollback 和 full support bundle export；必须具备 auth/team scope、redaction、destination allowlist、backup/preimage、approval、audit、retention 和 revoke path。 |
+| 19 | Managed ops / upgrade / support export | 按 [`../architecture/operations-deployment-observability-boundary.md`](../contracts/operations-deployment-observability-boundary.md) 逐级打开 remote read-only ops、remote ops control、managed upgrade/rollback 和 full support bundle export；必须具备 auth/team scope、redaction、destination allowlist、backup/preimage、approval、audit、retention 和 revoke path。 |
 
 任一 backlog 主题进入实现前，都必须先补对应设计门禁；不能用上一主题的 smoke 或 v1.0 release gate
 替代当前主题的 approval / rollback / audit 证据。
@@ -729,7 +729,7 @@ AreaFlow 达到 100% 时，必须能证明：
   execution cutover 的 go/no-go 状态；没有真实 pass 前，`./task-loop run` 不得自动转发。
 - release readiness、acceptance gate、exception apply preview 和 final gate 都有可复验 evidence；
   测试通过不能替代 release final gate。
-- completion audit 按 [`../architecture/completion-audit-contract.md`](../../../architecture/completion-audit-contract.md)
+- completion audit 按 [`../architecture/completion-audit-contract.md`](../contracts/completion-audit-contract.md)
   逐项返回 complete；release final gate `pass` 不能替代该审计。
 - `project_reference` / `external_project` historical artifact 的恢复限制被 restore dry-run 和
   artifact integrity 明确标记为 metadata-only、skipped 或 needs_attention，而不是完整 pass。

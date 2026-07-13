@@ -25,13 +25,13 @@ v0.9 Desktop Shell 的 local service status、dashboard launcher、desktop gates
 v1.0 Stable Platform 的 100% 完成条件、release/completion/ops/dogfood/protected path 总边界见
 [`../architecture/v1.0-stable-platform-contract.md`](../contracts/v1.0-stable-platform-contract.md)。
 v1.0 release final gate、exception 和 publish preview 的统一语义见
-[`../architecture/release-final-gate-contract.md`](../../../architecture/release-final-gate-contract.md)。
+[`../architecture/release-final-gate-contract.md`](../contracts/release-final-gate-contract.md)。
 0-100% completion audit 和最终完成证明边界见
-[`../architecture/completion-audit-contract.md`](../../../architecture/completion-audit-contract.md)。
+[`../architecture/completion-audit-contract.md`](../contracts/completion-audit-contract.md)。
 Plugin / marketplace seed 和未知 plugin execution 的边界见
 [`../architecture/plugin-marketplace-boundary.md`](../../../../proposals/plugin-marketplace.md)。
 Object artifact store、archive copy/upload、retention-aware GC 和 delete apply 的边界见
-[`../architecture/object-artifact-retention-contract.md`](../../../architecture/object-artifact-retention-contract.md)。
+[`../architecture/object-artifact-retention-contract.md`](../contracts/object-artifact-retention-contract.md)。
 Team Console、远程控制台和多用户控制面的边界见
 [`../architecture/team-remote-control-boundary.md`](../../../../proposals/team-and-remote-control.md)。
 Budget、quota、rate limit 和 usage metering 的边界见
@@ -39,7 +39,7 @@ Budget、quota、rate limit 和 usage metering 的边界见
 External integrations、webhooks、third-party callbacks 和多 API 接入的边界见
 [`../architecture/integration-webhook-boundary.md`](../../../../proposals/integrations-and-webhooks.md)。
 Operations、deployment、observability、support bundle、telemetry、upgrade 和 rollback 的边界见
-[`../architecture/operations-deployment-observability-boundary.md`](../../../architecture/operations-deployment-observability-boundary.md)。
+[`../architecture/operations-deployment-observability-boundary.md`](../contracts/operations-deployment-observability-boundary.md)。
 
 ## Gate Summary
 

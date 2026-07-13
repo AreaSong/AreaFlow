@@ -23,7 +23,7 @@ authoring cutover 和 execution cutover。v0.4 只切新 workflow version author
 
 AreaFlow 读取 AreaMatrix workflow、residual、task metadata，写入 PostgreSQL，不改变 AreaMatrix。
 具体 read envelope、minimum import set、explicit non-imports 和 artifact metadata 策略见
-[`../architecture/areamatrix-import-scope-contract.md`](../../../architecture/areamatrix-import-scope-contract.md)。
+[`../architecture/areamatrix-import-scope-contract.md`](../contracts/areamatrix-import-scope-contract.md)。
 
 v1 历史只导入 index、hash、path 和 metadata，不搬原始 execution 文件，不重写 `progress.json`。
 

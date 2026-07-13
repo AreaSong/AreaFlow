@@ -1,6 +1,7 @@
 import type {
   ApprovalRecordsResponse,
   ArtifactListResponse,
+  ArtifactRecord,
   AuditEventsResponse,
   CompletionAuditSnapshotReadinessResponse,
   ExecutionCutoverReadinessResponse,
@@ -23,6 +24,8 @@ import type {
   ReleaseRolloutPlanPreviewResponse,
   ResidualListResponse,
   RunDetailResponse,
+  RunAttemptsResponse,
+  RunTasksResponse,
   ShimApplyGateResponse,
   ShimApplyPacketPreviewResponse,
   ShimAuthorizationPacketResponse,
@@ -34,8 +37,13 @@ import type {
   WorkerPoolSchedulePreviewResponse,
   WorkerPoolSummaryResponse,
   WorkflowStagesResponse,
+  WorkflowCollectionResponse,
   WorkflowVersionListResponse,
   WorkflowVersionRunsResponse,
+  RunCollectionResponse,
+  WorkerCollectionResponse,
+  ArtifactCollectionResponse,
+  WorkerDetailResponse,
 } from "./types";
 
 async function getJSON<T>(path: string): Promise<T> {
@@ -58,8 +66,30 @@ function projectQuery(projectKey: string): string {
   return `project_key=${encodeURIComponent(projectKey)}`;
 }
 
+type CollectionOptions = Record<string, string | number | boolean | undefined>;
+
+function collectionPath(resource: string, options: CollectionOptions = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  return `${API_BASE}/${resource}${query.size ? `?${query}` : ""}`;
+}
+
 export const api = {
   projects: () => getJSON<ProjectListResponse>(`${API_BASE}/projects`),
+  workflows: (projectKey?: string, options: CollectionOptions = {}) =>
+    getJSON<WorkflowCollectionResponse>(collectionPath("workflows", { limit: 200, project_key: projectKey, ...options })),
+  runs: (projectKey?: string, options: CollectionOptions = {}) =>
+    getJSON<RunCollectionResponse>(collectionPath("runs", { limit: 200, project_key: projectKey, ...options })),
+  workers: (projectKey?: string, options: CollectionOptions = {}) =>
+    getJSON<WorkerCollectionResponse>(collectionPath("workers", { limit: 200, project_key: projectKey, ...options })),
+  workerDetail: (projectKey: string, workerID: number) =>
+    getJSON<WorkerDetailResponse>(collectionPath(`workers/${workerID}`, { limit: 50, project_key: projectKey })),
+  artifacts: (projectKey?: string, options: CollectionOptions = {}) =>
+    getJSON<ArtifactCollectionResponse>(collectionPath("artifacts", { limit: 200, project_key: projectKey, ...options })),
+  artifactDetail: (projectKey: string, artifactID: number) =>
+    getJSON<ArtifactRecord>(collectionPath(`artifacts/${artifactID}`, { project_key: projectKey })),
   projectSummary: (projectKey: string) =>
     getJSON<ProjectSummary>(`${API_BASE}/projects/${projectKey}/summary`),
   projectReadiness: (projectKey: string) =>
@@ -92,6 +122,10 @@ export const api = {
     getJSON<RunDetailResponse>(
       `${API_BASE}/runs/${runID}?project_key=${encodeURIComponent(projectKey)}`,
     ),
+  runTasks: (projectKey: string, runID: number) =>
+    getJSON<RunTasksResponse>(`${API_BASE}/runs/${runID}/tasks?${projectQuery(projectKey)}`),
+  runAttempts: (projectKey: string, runID: number) =>
+    getJSON<RunAttemptsResponse>(`${API_BASE}/runs/${runID}/attempts?${projectQuery(projectKey)}`),
   projectArtifacts: (projectKey: string) =>
     getJSON<ArtifactListResponse>(`${API_BASE}/projects/${projectKey}/artifacts?limit=8`),
   projectResiduals: (projectKey: string) =>
@@ -180,8 +214,8 @@ export const api = {
     getJSON<ExecutionForwardingV1RollbackPreviewResponse>(
       `${API_BASE}/projects/${projectKey}/execution-forwarding-v1-rollback-preview`,
     ),
-  projectAuditEvents: (projectKey: string) =>
-    getJSON<AuditEventsResponse>(`${API_BASE}/audit-events?project_key=${projectKey}&limit=20`),
+  projectAuditEvents: (projectKey: string, options: CollectionOptions = {}) =>
+    getJSON<AuditEventsResponse>(collectionPath("audit-events", { project_key: projectKey, limit: 200, ...options })),
   projectEvents: (projectKey: string) =>
     getJSON<ProjectEventsResponse>(`${API_BASE}/projects/${projectKey}/events?limit=12`),
 };

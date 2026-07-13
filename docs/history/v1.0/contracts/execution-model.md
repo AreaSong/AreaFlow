@@ -196,7 +196,7 @@ attempt_output:
 Runner preview 是 v0.5 的 dry-run 执行预演。它只证明 execution model 可以表达 run、
 run_task、attempt、preflight、artifact、event 和 audit event，不执行项目写入、命令、secret
 解析、网络访问或 AI engine 调用。
-阶段合同见 [`v0.5-runner-preview-contract.md`](../history/v1.0/contracts/v0.5-runner-preview-contract.md)；该合同是判断
+阶段合同见 [`v0.5-runner-preview-contract.md`](v0.5-runner-preview-contract.md)；该合同是判断
 `runner.preview`、dry-run run control 和 v0.6 handoff 的源事实。
 
 v0.5a preview 固定创建：
@@ -257,7 +257,7 @@ AreaMatrix `codex-cli` profile disabled，且 `run_commands` / `execute_agents` 
 Codex CLI 调用仍需要 explicit execution approval、secret policy、budget policy、worker scope 和
 artifact redaction policy 同时通过；否则状态只能进入 `needs_approval`，不能执行。
 Budget / quota policy 的 estimate、reservation、charge 和 enforcement 语义见
-[`budget-quota-boundary.md`](../../proposals/budget-and-quota.md)；v1.0 前 budget readiness 不能阻断真实 run，也不能
+[`budget-quota-boundary.md`](../../../../proposals/budget-and-quota.md)；v1.0 前 budget readiness 不能阻断真实 run，也不能
 被解释为已打开 spend control。
 
 ## Execution Approval Gate
@@ -448,7 +448,7 @@ rollback result:
 Worker 不拥有状态源事实。Worker 只拿一次 run/task 的 scoped lease。
 多项目调度、slot 计算、lease recovery、preview 与真实 scheduler 的完整合同见
 [`worker-scheduling-contract.md`](worker-scheduling-contract.md)。
-v0.6 worker beta 的 scoped execution 边界见 [`v0.6-worker-beta-contract.md`](../history/v1.0/contracts/v0.6-worker-beta-contract.md)。
+v0.6 worker beta 的 scoped execution 边界见 [`v0.6-worker-beta-contract.md`](v0.6-worker-beta-contract.md)。
 
 规则：
 

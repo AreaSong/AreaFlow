@@ -3,11 +3,11 @@
 ## Purpose
 
 本文定义 AreaFlow 从 0% 走到 v1.0 100% 稳定平台时，怎样证明“真的完成”。它补充
-[`v1.0-stable-platform-contract.md`](../history/v1.0/contracts/v1.0-stable-platform-contract.md)、
+[`v1.0-stable-platform-contract.md`](v1.0-stable-platform-contract.md)、
 [`release-final-gate-contract.md`](release-final-gate-contract.md)、
 [`operations-deployment-observability-boundary.md`](operations-deployment-observability-boundary.md)、
-[`high-risk-apply-ladder.md`](../../proposals/high-risk-apply.md) 和
-[`../history/v1.0/evidence/implementation-gap-audit.md`](../history/v1.0/evidence/implementation-gap-audit.md)。
+[`high-risk-apply-ladder.md`](../../../../proposals/high-risk-apply.md) 和
+[`../history/v1.0/evidence/implementation-gap-audit.md`](../evidence/implementation-gap-audit.md)。
 
 Completion audit 是最终完成审计，不是新的 apply 权限。它只聚合当前状态证据、命令输出、smoke 结果、
 release preview 链、AreaMatrix dogfood 状态和 backlog 状态。它不创建 release package、不 publish、不

@@ -528,8 +528,8 @@ func operationsLocalBootstrapSmokeItem(proof OperationsSmokeProof, generatedAt t
 		!proof.RemoteTelemetryEnabled &&
 		!proof.AreaMatrixProtectedPathsTouched {
 		evidenceRefs := []string{
-			"docs/architecture/operations-deployment-observability-boundary.md",
-			"docs/development/bootstrap-smoke-evidence.md",
+			"docs/operations/deployment.md",
+			"docs/history/v1.0/evidence/bootstrap-smoke-evidence.md",
 		}
 		if uri := metadataString(proof.Metadata, "evidence_uri"); uri != "" {
 			evidenceRefs = append(evidenceRefs, uri)
@@ -558,8 +558,8 @@ func operationsLocalBootstrapSmokeItem(proof OperationsSmokeProof, generatedAt t
 			Status:   "needs_attention",
 			Message:  "latest operations smoke proof lacks traceable evidence",
 			EvidenceRefs: []string{
-				"docs/architecture/operations-deployment-observability-boundary.md",
-				"docs/development/bootstrap-smoke-evidence.md",
+				"docs/operations/deployment.md",
+				"docs/history/v1.0/evidence/bootstrap-smoke-evidence.md",
 			},
 			RequiredEvidence: []string{
 				"empty PostgreSQL database migrated",
@@ -580,8 +580,8 @@ func operationsLocalBootstrapSmokeItem(proof OperationsSmokeProof, generatedAt t
 			Status:   "needs_attention",
 			Message:  "latest operations smoke proof is stale and must be refreshed before completion audit can pass",
 			EvidenceRefs: []string{
-				"docs/architecture/operations-deployment-observability-boundary.md",
-				"docs/development/bootstrap-smoke-evidence.md",
+				"docs/operations/deployment.md",
+				"docs/history/v1.0/evidence/bootstrap-smoke-evidence.md",
 			},
 			RequiredEvidence: []string{
 				"empty PostgreSQL database migrated",
@@ -603,8 +603,8 @@ func operationsLocalBootstrapSmokeItem(proof OperationsSmokeProof, generatedAt t
 			Status:   "blocked",
 			Message:  "latest operations smoke proof is not pass",
 			EvidenceRefs: []string{
-				"docs/architecture/operations-deployment-observability-boundary.md",
-				"docs/development/bootstrap-smoke-evidence.md",
+				"docs/operations/deployment.md",
+				"docs/history/v1.0/evidence/bootstrap-smoke-evidence.md",
 			},
 			RequiredEvidence: []string{
 				"empty PostgreSQL database migrated",
@@ -624,8 +624,8 @@ func operationsLocalBootstrapSmokeItem(proof OperationsSmokeProof, generatedAt t
 		Status:   "needs_attention",
 		Message:  "fresh install/migrate/start/register smoke evidence must be supplied before completion audit can pass",
 		EvidenceRefs: []string{
-			"docs/architecture/operations-deployment-observability-boundary.md",
-			"docs/development/bootstrap-smoke-evidence.md",
+			"docs/operations/deployment.md",
+			"docs/history/v1.0/evidence/bootstrap-smoke-evidence.md",
 		},
 		RequiredEvidence: []string{
 			"empty PostgreSQL database migrated",
@@ -859,8 +859,8 @@ func operationsTelemetryItem() OperationsReadinessItem {
 		Status:   "ready",
 		Message:  "telemetry remains local-only by default",
 		EvidenceRefs: []string{
-			"docs/architecture/operations-deployment-observability-boundary.md",
-			"docs/architecture/v1.0-stable-platform-contract.md",
+			"docs/operations/deployment.md",
+			"docs/history/v1.0/contracts/v1.0-stable-platform-contract.md",
 		},
 		RequiredEvidence: []string{
 			"remote telemetry disabled by default",
@@ -879,8 +879,8 @@ func operationsManagedOpsDeferredItem() OperationsReadinessItem {
 		Status:   "deferred",
 		Message:  "remote ops, managed upgrade, destructive rollback and full support export remain v1.x",
 		EvidenceRefs: []string{
-			"docs/architecture/operations-deployment-observability-boundary.md",
-			"docs/architecture/high-risk-apply-ladder.md",
+			"docs/operations/deployment.md",
+			"proposals/high-risk-apply.md",
 		},
 		RequiredEvidence: []string{
 			"managed ops R4 apply packet before opening",

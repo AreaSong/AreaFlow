@@ -70,7 +70,7 @@ npm run dev
 - [文档总览](docs/README.md)
 - [产品模型](docs/concepts/product-model.md)
 - [架构总览](docs/architecture/overview.md)
-- [项目配置](./docs/history/v1.0/contracts/project-config.md)
+- [项目配置](docs/reference/configuration.md)
 - [Web 页面指南](docs/guides/web/README.md)
 - [开发环境](docs/development/setup.md)
 - [路线图](docs/roadmap.md)

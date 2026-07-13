@@ -41,7 +41,7 @@ worker scheduling
 - 显式命令导出 `.areaflow/status.json`。
 
 只读导入深度以
-[`../architecture/areamatrix-import-scope-contract.md`](../architecture/areamatrix-import-scope-contract.md)
+[`AreaMatrix adapter reference`](../../../reference/adapters/areamatrix.md)
 为准：v0.1 只索引 metadata、hash、path、size、status summary 和少量机器可解析 ledger，不复制历史
 prompt、日志、报告、diff、evidence 原文。
 
@@ -78,10 +78,10 @@ not_installed
 旧 runner。`retired_thin_entry` 只能退役旧主执行能力，不能删除历史 workflow、progress、logs、evidence、
 release evidence 或 AreaFlow 审计事实。
 v0.4 compatibility、shim readiness、DB-only authoring cutover apply 和 rollback 边界见
-[`../architecture/v0.4-workflow-ownership-cutover-contract.md`](../history/v1.0/contracts/v0.4-workflow-ownership-cutover-contract.md)；
+[`v0.4-workflow-ownership-cutover-contract.md`](v0.4-workflow-ownership-cutover-contract.md)；
 `read_only_shim` 和 `project.cutover.apply` 都不能被解释为 `execution_forwarding`。
 v0.6 worker beta 的 scoped execution 边界见
-[`../architecture/v0.6-worker-beta-contract.md`](../history/v1.0/contracts/v0.6-worker-beta-contract.md)；fixture、
+[`v0.6-worker-beta-contract.md`](v0.6-worker-beta-contract.md)；fixture、
 read-only、artifact-only、fixture/temp rollback drill、readiness 和 beta gate 证据都不能累计成 AreaMatrix
 execution cutover 或 `./task-loop run` forwarding。
 

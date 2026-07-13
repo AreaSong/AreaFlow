@@ -4,13 +4,13 @@
 
 本文定义 AreaFlow 多项目、多 worker 的调度合同。它补充
 [`execution-model.md`](execution-model.md)、[`data-model-v1.md`](data-model-v1.md) 和
-[`security-permissions.md`](../history/v1.0/contracts/security-permissions.md)，目标是让 runner、worker、API、Web、Desktop
+[`security.md`](../../../architecture/security.md)，目标是让 runner、worker、API、Web、Desktop
 和未来 scheduler 对同一套 lease / concurrency / recovery 语义达成一致。
 
 本文不是自动 scheduler 授权。v0.8 的 worker pool summary 和 schedule preview 仍然只读，不创建 lease、
 不启动 worker、不写 event/audit、不调用 engine、不读取 secret，也不写被管理项目。
 v0.8 当前只打开的 summary / schedule preview / readiness 边界见
-[`v0.8-multi-project-worker-pool-contract.md`](../history/v1.0/contracts/v0.8-multi-project-worker-pool-contract.md)。
+[`v0.8-multi-project-worker-pool-contract.md`](v0.8-multi-project-worker-pool-contract.md)。
 
 ## 核心不变量
 
@@ -215,7 +215,7 @@ AreaMatrix 这种需要 macOS app、Xcode 或本机 GUI 能力的项目，默认
 `host_bound_worker`。Container 不是默认要求。
 
 `remote_worker` 在 v1.0 前只作为 readiness / preview / blocked reason。真实 remote worker credential
-属于 R4，必须按 [`auth-team-secret-boundary.md`](../../proposals/auth-team-secret.md) 另行打开；remote worker
+属于 R4，必须按 [`auth-team-secret-boundary.md`](../../../../proposals/auth-team-secret.md) 另行打开；remote worker
 不得直连 PostgreSQL，只能通过 API 注册、heartbeat、lease、attempt 和 artifact upload。远程 worker
 凭证必须至少绑定以下 scope：
 
@@ -232,7 +232,7 @@ revoked_at nullable
 ```
 
 远程 worker 不持有长期 secret。需要 engine 或 provider secret 时，只能请求
-[`auth-team-secret-boundary.md`](../../proposals/auth-team-secret.md) 定义的 short-lived scoped binding；该
+[`auth-team-secret-boundary.md`](../../../../proposals/auth-team-secret.md) 定义的 short-lived scoped binding；该
 binding 不能进入 worker 持久状态、stdout/stderr、artifact、event、audit 或 backup。
 
 ## AreaMatrix First Policy

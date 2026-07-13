@@ -1268,6 +1268,265 @@ func TestProjectListEndpoint(t *testing.T) {
 	}
 }
 
+func TestResourceCollectionEndpoints(t *testing.T) {
+	created := time.Date(2026, 7, 13, 8, 0, 0, 0, time.UTC)
+	projectA := project.Record{ID: 1, Key: "project-a", Name: "Project A", Adapter: "areamatrix", WorkflowProfile: "areamatrix"}
+	projectB := project.Record{ID: 2, Key: "project-b", Name: "Project B", Adapter: "areamatrix", WorkflowProfile: "areamatrix"}
+	store := fakeProjectStore{
+		records:      []project.Record{projectA, projectB},
+		recordsByKey: map[string]project.Record{projectA.Key: projectA, projectB.Key: projectB},
+		versionsHook: func(record project.Record) []project.WorkflowVersion {
+			return []project.WorkflowVersion{{ID: record.ID * 10, ProjectID: record.ID, DisplayLabel: "v1", LifecycleStatus: "active", StatusSummary: map[string]any{}, CreatedAt: created, UpdatedAt: created.Add(time.Duration(record.ID) * time.Minute)}}
+		},
+		runsHook: func(record project.Record, version project.WorkflowVersion, _ int) []project.RunRecord {
+			return []project.RunRecord{{ID: record.ID * 100, ProjectID: record.ID, WorkflowVersionID: version.ID, RunType: "runner", RunKind: "execution", Status: "passed", Summary: map[string]any{}, Metadata: map[string]any{}, StartedAt: created.Add(time.Duration(record.ID) * time.Minute)}}
+		},
+		workersHook: func(record project.Record, _ int) []project.WorkerRecord {
+			return []project.WorkerRecord{{ID: record.ID * 1000, ProjectID: record.ID, WorkerKey: record.Key + "-worker", WorkerType: "local", Status: "online", Capabilities: []string{"read_project"}, Metadata: map[string]any{}, RegisteredAt: created, UpdatedAt: created.Add(time.Duration(record.ID) * time.Minute)}}
+		},
+		artifactsHook: func(record project.Record, _ int) []project.ArtifactRecord {
+			return []project.ArtifactRecord{{ID: record.ID * 10000, ProjectID: record.ID, WorkflowVersionID: record.ID * 10, ArtifactType: "evidence", StorageBackend: "local", URI: "artifact://" + record.Key, Metadata: map[string]any{}, CreatedAt: created.Add(time.Duration(record.ID) * time.Minute)}}
+		},
+	}
+	handler := NewHandler(store)
+
+	for _, endpoint := range []struct {
+		path string
+		key  string
+	}{
+		{path: "/api/v1/workflows", key: "workflows"},
+		{path: "/api/v1/runs", key: "runs"},
+		{path: "/api/v1/workers", key: "workers"},
+		{path: "/api/v1/artifacts", key: "artifacts"},
+	} {
+		t.Run(endpoint.key, func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, endpoint.path+"?project_key=project-a&limit=1", nil))
+			if resp.Code != http.StatusOK {
+				t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
+			}
+			var body map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			items, ok := body[endpoint.key].([]any)
+			if !ok || len(items) != 1 {
+				t.Fatalf("%s items = %#v", endpoint.key, body[endpoint.key])
+			}
+			item := items[0].(map[string]any)
+			projectBody := item["project"].(map[string]any)
+			if projectBody["key"] != "project-a" {
+				t.Fatalf("project key = %v, want project-a", projectBody["key"])
+			}
+		})
+	}
+}
+
+func TestResourceCollectionEndpointRejectsInvalidLimit(t *testing.T) {
+	handler := NewHandler(fakeProjectStore{})
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/v1/runs?limit=0", nil))
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+type resourceCollectionTestStore struct {
+	fakeProjectStore
+	workflowPage project.WorkflowCollectionPage
+	runPage      project.RunCollectionPage
+	workerPage   project.WorkerCollectionPage
+	artifactPage project.ArtifactCollectionPage
+	workflowOpts project.WorkflowPageOptions
+	runOpts      project.RunPageOptions
+	workerOpts   project.ResourcePageOptions
+	artifactOpts project.ArtifactPageOptions
+	err          error
+}
+
+func (s *resourceCollectionTestStore) ListWorkflowCollection(_ context.Context, options project.WorkflowPageOptions) (project.WorkflowCollectionPage, error) {
+	s.workflowOpts = options
+	return s.workflowPage, s.err
+}
+
+func (s *resourceCollectionTestStore) ListRunCollection(_ context.Context, options project.RunPageOptions) (project.RunCollectionPage, error) {
+	s.runOpts = options
+	return s.runPage, s.err
+}
+
+func (s *resourceCollectionTestStore) ListWorkerCollection(_ context.Context, options project.ResourcePageOptions) (project.WorkerCollectionPage, error) {
+	s.workerOpts = options
+	return s.workerPage, s.err
+}
+
+func (s *resourceCollectionTestStore) ListArtifactCollection(_ context.Context, options project.ArtifactPageOptions) (project.ArtifactCollectionPage, error) {
+	s.artifactOpts = options
+	return s.artifactPage, s.err
+}
+
+func TestResourceCollectionsForwardFiltersCursorAndAssociations(t *testing.T) {
+	created := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	record := project.Record{ID: 7, Key: "area", Name: "Area"}
+	version := project.WorkflowVersion{ID: 8, ProjectID: 7, DisplayLabel: "v1", StatusSummary: map[string]any{}, CreatedAt: created, UpdatedAt: created}
+	run := project.RunRecord{ID: 9, ProjectID: 7, WorkflowVersionID: 8, Status: "running", RunKind: "execution", Summary: map[string]any{}, Metadata: map[string]any{}, StartedAt: created}
+	worker := project.WorkerRecord{ID: 10, ProjectID: 7, WorkerKey: "w", Status: "online", Capabilities: []string{}, Metadata: map[string]any{}, RegisteredAt: created, UpdatedAt: created}
+	artifact := project.ArtifactRecord{ID: 11, ProjectID: 7, WorkflowVersionID: 8, RunID: 9, ArtifactType: "report", Metadata: map[string]any{}, CreatedAt: created}
+	store := &resourceCollectionTestStore{
+		fakeProjectStore: fakeProjectStore{record: record},
+		workflowPage:     project.WorkflowCollectionPage{Items: []project.WorkflowCollectionItem{{Project: record, Workflow: version}}, NextCursor: "workflow-next"},
+		runPage:          project.RunCollectionPage{Items: []project.RunCollectionItem{{Project: record, Workflow: version, Run: run}}, NextCursor: "run-next"},
+		workerPage:       project.WorkerCollectionPage{Items: []project.WorkerCollectionItem{{Project: record, Worker: worker}}, NextCursor: "worker-next"},
+		artifactPage:     project.ArtifactCollectionPage{Items: []project.ArtifactCollectionItem{{Project: record, Artifact: artifact}}, NextCursor: "artifact-next"},
+	}
+	handler := NewHandler(store)
+
+	requestAPI[workflowCollectionResponse](t, handler, "/api/v1/workflows?project_key=area&status=active&kind=release&import_mode=authored&cursor=w&limit=25")
+	if store.workflowOpts.ProjectKey != "area" || store.workflowOpts.Status != "active" || store.workflowOpts.Kind != "release" || store.workflowOpts.ImportMode != "authored" || store.workflowOpts.Cursor != "w" || store.workflowOpts.Limit != 25 {
+		t.Fatalf("workflow options = %+v", store.workflowOpts)
+	}
+	dryRun := false
+	runs := requestAPI[runCollectionResponse](t, handler, "/api/v1/runs?project_key=area&status=running&kind=execution&type=approved_artifact_write&dry_run=false&cursor=r&limit=25")
+	if store.runOpts.DryRun == nil || *store.runOpts.DryRun != dryRun || len(runs.Runs) != 1 || runs.Runs[0].Run.ProjectID != 7 || runs.NextCursor != "run-next" {
+		t.Fatalf("run response/options = %+v %+v", runs, store.runOpts)
+	}
+	requestAPI[workerCollectionResponse](t, handler, "/api/v1/workers?project_key=area&worker_key=local&status=online&type=local_host&capability=read_project&cursor=x")
+	if store.workerOpts.Key != "local" || store.workerOpts.Kind != "read_project" || store.workerOpts.Type != "local_host" {
+		t.Fatalf("worker options = %+v", store.workerOpts)
+	}
+	artifacts := requestAPI[artifactCollectionResponse](t, handler, "/api/v1/artifacts?project_key=area&type=report&storage_backend=local&sha256=abc&run_id=9&workflow_version_id=8&cursor=a")
+	if store.artifactOpts.RunID != 9 || store.artifactOpts.WorkflowVersionID != 8 || len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].Artifact.ProjectID != 7 || artifacts.Artifacts[0].Artifact.RunID != 9 || artifacts.NextCursor != "artifact-next" {
+		t.Fatalf("artifact response/options = %+v %+v", artifacts, store.artifactOpts)
+	}
+}
+
+func TestResourceCollectionRejectsInvalidFiltersAndCursor(t *testing.T) {
+	store := &resourceCollectionTestStore{fakeProjectStore: fakeProjectStore{}, err: project.ErrInvalidResourceCursor}
+	handler := NewHandler(store)
+	for _, path := range []string{"/api/v1/runs?dry_run=maybe", "/api/v1/artifacts?run_id=zero", "/api/v1/workflows?cursor=bad"} {
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, path, nil))
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d body=%s", path, resp.Code, resp.Body.String())
+		}
+	}
+}
+
+type auditEventCollectionTestStore struct {
+	fakeProjectStore
+	page    project.AuditEventPage
+	options project.AuditEventPageOptions
+	err     error
+}
+
+func (s *auditEventCollectionTestStore) ListAuditEventCollection(_ context.Context, options project.AuditEventPageOptions) (project.AuditEventPage, error) {
+	s.options = options
+	return s.page, s.err
+}
+
+func TestAuditEventCollectionForwardsFiltersAndCursor(t *testing.T) {
+	created := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	store := &auditEventCollectionTestStore{
+		fakeProjectStore: fakeProjectStore{record: project.Record{ID: 7, Key: "area"}},
+		page:             project.AuditEventPage{Items: []project.AuditEventRecord{{ID: 9, ProjectID: 7, ActorID: 3, Action: "worker.register", Decision: "allowed", Metadata: map[string]any{}, CreatedAt: created}}, NextCursor: "next"},
+	}
+	response := requestAPI[auditEventsResponse](t, NewHandler(store), "/api/v1/audit-events?project_key=area&actor_id=3&action=worker.register&decision=allowed&resource_type=worker&resource=local&from=2026-07-01T00%3A00%3A00Z&to=2026-07-31T23%3A59%3A59Z&cursor=current&limit=25")
+	if store.options.ProjectID != 7 || store.options.ActorID != 3 || store.options.Action != "worker.register" || store.options.Decision != "allowed" || store.options.ResourceType != "worker" || store.options.Resource != "local" || store.options.Cursor != "current" || store.options.Limit != 25 || store.options.From == nil || store.options.To == nil {
+		t.Fatalf("audit options = %+v", store.options)
+	}
+	if response.Count != 1 || response.NextCursor != "next" || len(response.AuditEvents) != 1 {
+		t.Fatalf("audit response = %+v", response)
+	}
+}
+
+func TestAuditEventCollectionRejectsInvalidFilters(t *testing.T) {
+	store := &auditEventCollectionTestStore{fakeProjectStore: fakeProjectStore{record: project.Record{ID: 7, Key: "area"}}, err: project.ErrInvalidResourceCursor}
+	handler := NewHandler(store)
+	for _, path := range []string{
+		"/api/v1/audit-events?actor_id=none",
+		"/api/v1/audit-events?from=yesterday",
+		"/api/v1/audit-events?from=2026-07-14T00%3A00%3A00Z&to=2026-07-13T00%3A00%3A00Z",
+		"/api/v1/audit-events?cursor=bad",
+	} {
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, path, nil))
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d body=%s", path, resp.Code, resp.Body.String())
+		}
+	}
+}
+
+type resourceDetailTestStore struct {
+	fakeProjectStore
+	workerDetail project.WorkerDetail
+	tasks        []project.RunTaskRecord
+	attempts     []project.RunAttemptRecord
+}
+
+func (s resourceDetailTestStore) GetWorker(context.Context, int64, int64, int) (project.WorkerDetail, error) {
+	return s.workerDetail, nil
+}
+func (s resourceDetailTestStore) ListRunTasks(context.Context, int64) ([]project.RunTaskRecord, error) {
+	return s.tasks, nil
+}
+func (s resourceDetailTestStore) GetRunTask(_ context.Context, _ int64, taskID int64) (project.RunTaskRecord, error) {
+	for _, item := range s.tasks {
+		if item.ID == taskID {
+			return item, nil
+		}
+	}
+	return project.RunTaskRecord{}, project.ErrRunTaskNotFound
+}
+func (s resourceDetailTestStore) ListRunAttempts(context.Context, int64) ([]project.RunAttemptRecord, error) {
+	return s.attempts, nil
+}
+func (s resourceDetailTestStore) GetRunAttempt(_ context.Context, _ int64, attemptID int64) (project.RunAttemptRecord, error) {
+	for _, item := range s.attempts {
+		if item.ID == attemptID {
+			return item, nil
+		}
+	}
+	return project.RunAttemptRecord{}, project.ErrRunAttemptNotFound
+}
+
+func TestWorkerDetailAndRunChildResourceEndpoints(t *testing.T) {
+	created := time.Date(2026, 7, 13, 11, 0, 0, 0, time.UTC)
+	record := project.Record{ID: 2, Key: "area"}
+	run := project.RunRecord{ID: 3, ProjectID: 2, WorkflowVersionID: 4, Summary: map[string]any{}, Metadata: map[string]any{}, StartedAt: created}
+	worker := project.WorkerRecord{ID: 5, ProjectID: 2, WorkerKey: "local", Capabilities: []string{}, Metadata: map[string]any{}, RegisteredAt: created, UpdatedAt: created}
+	task := project.RunTaskRecord{ID: 6, ProjectID: 2, RunID: 3, Metadata: map[string]any{}, CreatedAt: created, UpdatedAt: created}
+	attempt := project.RunAttemptRecord{ID: 7, ProjectID: 2, RunID: 3, RunTaskID: 6, Metadata: map[string]any{}, StartedAt: created}
+	store := resourceDetailTestStore{
+		fakeProjectStore: fakeProjectStore{record: record, runDetail: project.RunDetail{Run: run}},
+		workerDetail:     project.WorkerDetail{Worker: worker, Heartbeats: []project.WorkerHeartbeatRecord{{ID: 8, ProjectID: 2, WorkerID: 5, Status: "online", ObservedAt: created, Metadata: map[string]any{}}}, Leases: []project.LeaseRecord{}},
+		tasks:            []project.RunTaskRecord{task}, attempts: []project.RunAttemptRecord{attempt},
+	}
+	handler := NewHandler(store)
+	workerBody := requestAPI[workerDetailResponse](t, handler, "/api/v1/workers/5?project_key=area")
+	if workerBody.Worker.ID != 5 || len(workerBody.Heartbeats) != 1 || workerBody.Heartbeats[0].ProjectID != 2 {
+		t.Fatalf("worker detail = %+v", workerBody)
+	}
+	taskList := requestAPI[struct {
+		Tasks []runTaskResponse `json:"tasks"`
+	}](t, handler, "/api/v1/runs/3/tasks?project_key=area")
+	if len(taskList.Tasks) != 1 || taskList.Tasks[0].ProjectID != 2 {
+		t.Fatalf("task list = %+v", taskList)
+	}
+	taskBody := requestAPI[runTaskResponse](t, handler, "/api/v1/runs/3/tasks/6?project_key=area")
+	if taskBody.ID != 6 {
+		t.Fatalf("task detail = %+v", taskBody)
+	}
+	attemptList := requestAPI[struct {
+		Attempts []runAttemptResponse `json:"attempts"`
+	}](t, handler, "/api/v1/runs/3/attempts?project_key=area")
+	if len(attemptList.Attempts) != 1 || attemptList.Attempts[0].ProjectID != 2 {
+		t.Fatalf("attempt list = %+v", attemptList)
+	}
+	attemptBody := requestAPI[runAttemptResponse](t, handler, "/api/v1/runs/3/attempts/7?project_key=area")
+	if attemptBody.ID != 7 {
+		t.Fatalf("attempt detail = %+v", attemptBody)
+	}
+}
+
 func TestProjectDetailEndpoint(t *testing.T) {
 	handler := NewHandler(fakeProjectStore{
 		record: project.Record{

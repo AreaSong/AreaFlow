@@ -6,9 +6,9 @@
 
 本文定义 AreaFlow engine cost、usage metering、budget policy、quota policy 和 rate limit enforcement 的
 长期边界。它补充
-[`execution-model.md`](../docs/architecture/execution-model.md)、
-[`security-permissions.md`](../docs/history/v1.0/contracts/security-permissions.md)、
-[`command-approval-contract.md`](../docs/history/v1.0/contracts/command-approval-contract.md)、
+[`execution-model.md`](../docs/concepts/execution-model.md)、
+[`security.md`](../docs/architecture/security.md)、
+[`commands-and-approvals.md`](../docs/concepts/commands-and-approvals.md)、
 [`auth-team-secret-boundary.md`](./auth-team-secret.md) 和
 [`high-risk-apply-ladder.md`](./high-risk-apply.md)。
 
