@@ -11,6 +11,7 @@
 /coverage.out
 
 # Web
+/node_modules/
 /web/node_modules/
 /web/coverage/
 

@@ -39,6 +39,7 @@
 - [Release](operations/release.md)
 - [Completion Audit](operations/completion-audit.md)
 - [开发环境](development/setup.md)
+- [品牌素材](../assets/brand/README.md)
 - [ADR](adr/)
 - [治理边界](../governance/README.md)
 - [路线图](roadmap.md)

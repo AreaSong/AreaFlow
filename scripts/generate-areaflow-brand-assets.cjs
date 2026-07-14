@@ -19,6 +19,7 @@ const {
   symbolSvg,
   wordmarkSvg,
 } = require("./lib/areaflow-brand-svg.cjs");
+const { expandRasterJobs, loadBrandManifest, repoRoot } = require("./brand-assets.cjs");
 
 let sharp;
 try {
@@ -29,9 +30,10 @@ try {
   process.exit(1);
 }
 
-const root = path.resolve(__dirname, "..");
-const finalDir = path.join(root, "assets", "brand", "final");
-const dirs = ["app-icon", "favicon", "lockup", "mark", "social", "stacked", "symbol", "wordmark"];
+const manifest = loadBrandManifest();
+const finalDir = path.join(repoRoot, manifest.packageRoot);
+const printDpiPerMillimetre = manifest.native.printDpi / 25.4;
+const refresh = process.argv.includes("--refresh");
 
 function write(relativePath, content) {
   const target = path.join(finalDir, relativePath);
@@ -84,8 +86,22 @@ function createIco(images) {
 
 async function main() {
   fs.mkdirSync(finalDir, { recursive: true });
-  dirs.forEach((dir) => fs.mkdirSync(path.join(finalDir, dir), { recursive: true }));
+  writeCanonicalSources();
+  await exportRasterJobs();
+  exportFavicon();
+  await exportOverview();
+  await exportMacos();
+  await exportIos();
+  await exportAndroid();
+  await exportWindows();
+  await exportPrint();
 
+  console.log(
+    `AreaFlow brand export complete: ${expandRasterJobs(manifest).length} raster contracts (refresh=${refresh})`,
+  );
+}
+
+function writeCanonicalSources() {
   const svgAssets = {
     "areaflow-app-icon-dark.svg": appIconSvg("dark"),
     "areaflow-app-icon-light.svg": appIconSvg("light"),
@@ -122,78 +138,47 @@ async function main() {
   write("README.md", readme);
   write("native/README.md", nativeReadme);
   write("print/README.md", printReadme);
+}
 
-  const normalSizes = [16, 32, 48, 64, 128, 180, 192, 256, 512, 1024];
-  for (const theme of ["dark", "light"]) {
-    for (const size of normalSizes) {
-      const source = size <= 48 ? appIconSvg(theme, "small") : appIconSvg(theme);
-      await render(source, `app-icon/areaflow-app-icon-${theme}-${size}.png`, size);
-    }
-    for (const size of [180, 1024]) {
-      await render(appIconSvg(theme, "opaque"), `app-icon/areaflow-app-icon-opaque-${theme}-${size}.png`, size);
-    }
-    for (const size of [192, 512]) {
-      await render(appIconSvg(theme, "maskable"), `app-icon/areaflow-app-icon-maskable-${theme}-${size}.png`, size);
+async function exportRasterJobs() {
+  for (const job of expandRasterJobs(manifest)) {
+    if (!refresh && fs.existsSync(path.join(finalDir, job.output))) continue;
+    const source = fs.readFileSync(path.join(finalDir, job.source));
+    if (job.alpha) {
+      await render(source, job.output, job.width, job.height);
+    } else {
+      await renderOpaque(source, job.output, job.width, job.height, manifest.native.androidBackground);
     }
   }
+}
 
-  for (const theme of ["dark", "light"]) {
-    for (const size of [256, 512, 1024]) {
-      await render(markSvg(theme), `mark/areaflow-logo-mark-${theme}-${size}.png`, size);
-      await render(monoMarkSvg(theme), `mark/areaflow-logo-mark-mono-${theme}-${size}.png`, size);
-      await render(symbolSvg(theme), `symbol/areaflow-logo-symbol-${theme}-${size}.png`, size);
-    }
+function exportFavicon() {
+  const faviconImages = manifest.favicon.sizes.map((size) => ({
+    size,
+    data: fs.readFileSync(path.join(finalDir, manifest.favicon.output.replace("{size}", String(size)))),
+  }));
+  if (refresh || !fs.existsSync(path.join(finalDir, manifest.favicon.ico))) {
+    write(manifest.favicon.ico, createIco(faviconImages));
   }
+}
 
-  const lockups = {
-    "areaflow-logo-lockup-1600x520.png": lockupSvg("default"),
-    "areaflow-logo-lockup-dark-1600x520.png": lockupSvg("dark"),
-    "areaflow-logo-lockup-light-1600x520.png": lockupSvg("light"),
-    "areaflow-logo-lockup-outlined-1600x520.png": lockupSvg("default", true),
-    "areaflow-logo-lockup-outlined-dark-1600x520.png": lockupSvg("dark", true),
-    "areaflow-logo-lockup-outlined-light-1600x520.png": lockupSvg("light", true),
-    "areaflow-logo-lockup-mono-dark-1600x520.png": monoLockupSvg("dark"),
-    "areaflow-logo-lockup-mono-light-1600x520.png": monoLockupSvg("light"),
-  };
-  for (const [file, svg] of Object.entries(lockups)) {
-    await render(svg, `lockup/${file}`, 1600, 520);
+async function exportOverview() {
+  if (refresh || !fs.existsSync(path.join(finalDir, manifest.overview.output))) {
+    await render(overviewSvg(), manifest.overview.output, manifest.overview.width, manifest.overview.height);
   }
-
-  await render(wordmarkSvg("dark"), "wordmark/areaflow-wordmark-dark-1200x336.png", 1200, 336);
-  await render(wordmarkSvg("light"), "wordmark/areaflow-wordmark-light-1200x336.png", 1200, 336);
-  await render(stackedSvg("dark"), "stacked/areaflow-logo-stacked-dark-1024.png", 1024);
-  await render(stackedSvg("light"), "stacked/areaflow-logo-stacked-light-1024.png", 1024);
-
-  const faviconImages = [];
-  for (const size of [16, 32, 48]) {
-    const data = await render(appIconSvg("light", "small"), `favicon/areaflow-favicon-${size}.png`, size);
-    faviconImages.push({ size, data });
-  }
-  write("favicon/areaflow-favicon.ico", createIco(faviconImages));
-
-  await render(socialSvg("light"), "social/areaflow-social-preview.png", 1200, 630);
-  await render(socialSvg("light"), "social/areaflow-social-preview-light.png", 1200, 630);
-  await render(socialSvg("dark"), "social/areaflow-social-preview-dark.png", 1200, 630);
-  await render(overviewSvg(), "areaflow-brand-overview.png", 1600, 1200);
-
-  await exportMacos();
-  await exportIos();
-  await exportAndroid();
-  await exportWindows();
-  await exportPrint();
-
-  console.log(`Generated AreaFlow brand assets in ${finalDir}`);
 }
 
 async function exportMacos() {
   const outputDirectory = path.join(finalDir, "native", "macos");
   const iconset = path.join(outputDirectory, "AreaFlow.iconset");
   const icns = path.join(outputDirectory, "AreaFlow.icns");
+  if (!refresh && fs.existsSync(icns)) return;
   fs.rmSync(iconset, { recursive: true, force: true });
   fs.mkdirSync(iconset, { recursive: true });
+  const source = fs.readFileSync(path.join(finalDir, manifest.native.macosSource));
   for (const size of [16, 32, 128, 256, 512]) {
-    await renderOpaque(appIconSvg("dark", "opaque"), path.relative(finalDir, path.join(iconset, `icon_${size}x${size}.png`)), size);
-    await renderOpaque(appIconSvg("dark", "opaque"), path.relative(finalDir, path.join(iconset, `icon_${size}x${size}@2x.png`)), size * 2);
+    await renderOpaque(source, path.relative(finalDir, path.join(iconset, `icon_${size}x${size}.png`)), size);
+    await renderOpaque(source, path.relative(finalDir, path.join(iconset, `icon_${size}x${size}@2x.png`)), size * 2);
   }
   if (process.platform === "darwin") {
     execFileSync("iconutil", ["-c", "icns", iconset, "-o", icns]);
@@ -202,7 +187,10 @@ async function exportMacos() {
 
 async function exportIos() {
   const outputDirectory = path.join(finalDir, "native", "ios", "AreaFlowAppIcon.appiconset");
+  const contentsPath = path.join(outputDirectory, "Contents.json");
+  if (!refresh && fs.existsSync(contentsPath)) return;
   fs.mkdirSync(outputDirectory, { recursive: true });
+  const source = fs.readFileSync(path.join(finalDir, manifest.native.iosSource));
   const specs = [
     ["iphone", "20x20", "2x", 40], ["iphone", "20x20", "3x", 60],
     ["iphone", "29x29", "2x", 58], ["iphone", "29x29", "3x", 87],
@@ -217,77 +205,109 @@ async function exportIos() {
   const images = [];
   for (const [idiom, size, scale, pixels] of specs) {
     const filename = `areaflow-${idiom}-${size.replaceAll(".", "_")}-${scale}.png`;
-    await renderOpaque(appIconSvg("dark", "opaque"), path.relative(finalDir, path.join(outputDirectory, filename)), pixels);
+    await renderOpaque(source, path.relative(finalDir, path.join(outputDirectory, filename)), pixels);
     images.push({ idiom, size, scale, filename });
   }
-  write(path.relative(finalDir, path.join(outputDirectory, "Contents.json")), `${JSON.stringify({ images, info: { author: "xcode", version: 1 } }, null, 2)}\n`);
+  const contents = `${JSON.stringify({ images, info: { author: "xcode", version: 1 } }, null, 2)}\n`;
+  write(path.relative(finalDir, path.join(outputDirectory, "Contents.json")), contents);
 }
 
 async function exportAndroid() {
   const base = path.join("native", "android", "res");
   const foregroundPath = path.join(base, "drawable-nodpi", "areaflow_adaptive_foreground.png");
   const backgroundPath = path.join(base, "drawable-nodpi", "areaflow_adaptive_background.png");
-  const foreground = await sharp(Buffer.from(symbolSvg("light")), { density: 384 })
+  if (!refresh && fs.existsSync(path.join(finalDir, foregroundPath))) return;
+  const foreground = await sharp(path.join(finalDir, manifest.native.androidForegroundSource), { density: 384 })
     .resize(286, 286, { fit: "contain" })
     .png()
     .toBuffer();
   const foregroundTarget = path.join(finalDir, foregroundPath);
   fs.mkdirSync(path.dirname(foregroundTarget), { recursive: true });
-  await sharp({ create: { width: 432, height: 432, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+  await sharp({
+    create: {
+      width: 432,
+      height: 432,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
     .composite([{ input: foreground, left: 73, top: 73 }])
     .png({ compressionLevel: 9 })
     .toFile(foregroundTarget);
   const backgroundTarget = path.join(finalDir, backgroundPath);
-  await sharp({ create: { width: 432, height: 432, channels: 3, background: "#07191D" } })
+  await sharp({
+    create: { width: 432, height: 432, channels: 3, background: manifest.native.androidBackground },
+  })
     .png({ compressionLevel: 9 })
     .toFile(backgroundTarget);
-  write(path.join(base, "values", "colors.xml"), `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="areaflow_icon_background">#07191D</color>\n</resources>\n`);
-  const adaptiveIcon = `<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n  <background android:drawable="@color/areaflow_icon_background" />\n  <foreground android:drawable="@drawable/areaflow_adaptive_foreground" />\n</adaptive-icon>\n`;
+  const colors = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="areaflow_icon_background">${manifest.native.androidBackground}</color>
+</resources>
+`;
+  write(path.join(base, "values", "colors.xml"), colors);
+  const adaptiveIcon = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <background android:drawable="@color/areaflow_icon_background" />
+  <foreground android:drawable="@drawable/areaflow_adaptive_foreground" />
+</adaptive-icon>
+`;
   write(path.join(base, "mipmap-anydpi-v26", "ic_launcher.xml"), adaptiveIcon);
   write(path.join(base, "mipmap-anydpi-v26", "ic_launcher_round.xml"), adaptiveIcon);
 }
 
 async function exportWindows() {
+  const output = "native/windows/AreaFlow.ico";
+  if (!refresh && fs.existsSync(path.join(finalDir, output))) return;
   const images = [];
+  const source = path.join(finalDir, manifest.native.windowsSource);
   for (const size of [16, 24, 32, 48, 64, 128, 256]) {
-    const data = await sharp(Buffer.from(appIconSvg("dark", "opaque")), { density: 384 })
+    const data = await sharp(source, { density: 384 })
       .resize(size, size, { fit: "fill" })
-      .flatten({ background: "#07191D" })
+      .flatten({ background: manifest.native.androidBackground })
       .removeAlpha()
       .png({ compressionLevel: 9 })
       .toBuffer();
     images.push({ size, data });
   }
-  write("native/windows/AreaFlow.ico", createIco(images));
+  write(output, createIco(images));
 }
 
 async function exportPrint() {
-  const light = lockupSvg("light", true);
-  const dark = lockupSvg("dark", true);
+  const light = fs.readFileSync(path.join(finalDir, manifest.native.printLightSource), "utf8");
+  const dark = fs.readFileSync(path.join(finalDir, manifest.native.printDarkSource), "utf8");
   const printDir = path.join(finalDir, "print");
   fs.mkdirSync(printDir, { recursive: true });
   write("print/areaflow-logo-light-background.svg", light);
   write("print/areaflow-logo-dark-background.svg", dark);
-  await sharp(Buffer.from(light), { density: 300 })
-    .resize(3600, 1170, { fit: "fill" })
-    .flatten({ background: "#FFFFFF" })
-    .toColourspace("cmyk")
-    .tiff({ compression: "lzw", resolutionUnit: "inch", xres: 300, yres: 300 })
-    .toFile(path.join(printDir, "areaflow-logo-light-background-cmyk.tiff"));
-  await sharp(Buffer.from(dark), { density: 300 })
-    .resize(3600, 1170, { fit: "fill" })
-    .flatten({ background: "#07191D" })
-    .toColourspace("cmyk")
-    .tiff({ compression: "lzw", resolutionUnit: "inch", xres: 300, yres: 300 })
-    .toFile(path.join(printDir, "areaflow-logo-dark-background-cmyk.tiff"));
-  if (process.platform === "darwin") {
+  const lightTiff = path.join(printDir, "areaflow-logo-light-background-cmyk.tiff");
+  const darkTiff = path.join(printDir, "areaflow-logo-dark-background-cmyk.tiff");
+  if (refresh || !fs.existsSync(lightTiff)) {
+    await sharp(Buffer.from(light), { density: manifest.native.printDpi })
+      .resize(3600, 1170, { fit: "fill" })
+      .flatten({ background: "#FFFFFF" })
+      .toColourspace("cmyk")
+      .tiff({ compression: "lzw", resolutionUnit: "inch", xres: printDpiPerMillimetre, yres: printDpiPerMillimetre })
+      .toFile(lightTiff);
+  }
+  if (refresh || !fs.existsSync(darkTiff)) {
+    await sharp(Buffer.from(dark), { density: manifest.native.printDpi })
+      .resize(3600, 1170, { fit: "fill" })
+      .flatten({ background: manifest.native.androidBackground })
+      .toColourspace("cmyk")
+      .tiff({ compression: "lzw", resolutionUnit: "inch", xres: printDpiPerMillimetre, yres: printDpiPerMillimetre })
+      .toFile(darkTiff);
+  }
+  const lightPdf = path.join(printDir, "areaflow-logo-light-background.pdf");
+  const darkPdf = path.join(printDir, "areaflow-logo-dark-background.pdf");
+  if (process.platform === "darwin" && (refresh || !fs.existsSync(lightPdf) || !fs.existsSync(darkPdf))) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "areaflow-brand-print-"));
     const lightPdfSource = path.join(tempDir, "light.svg");
     const darkPdfSource = path.join(tempDir, "dark.svg");
     fs.writeFileSync(lightPdfSource, addSvgBackground(light, "#FFFFFF"));
-    fs.writeFileSync(darkPdfSource, addSvgBackground(dark, "#07191D"));
-    execFileSync("sips", ["-s", "format", "pdf", lightPdfSource, "--out", path.join(printDir, "areaflow-logo-light-background.pdf")]);
-    execFileSync("sips", ["-s", "format", "pdf", darkPdfSource, "--out", path.join(printDir, "areaflow-logo-dark-background.pdf")]);
+    fs.writeFileSync(darkPdfSource, addSvgBackground(dark, manifest.native.androidBackground));
+    execFileSync("sips", ["-s", "format", "pdf", lightPdfSource, "--out", lightPdf]);
+    execFileSync("sips", ["-s", "format", "pdf", darkPdfSource, "--out", darkPdf]);
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }

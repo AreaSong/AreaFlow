@@ -319,7 +319,7 @@ function overviewSvg() {
 
 const readme = `# AreaFlow Brand Assets
 
-本目录保存 AreaFlow 当前品牌素材包。它是仓库内设计素材，不是 Web runtime 资源入口；文件存在不代表 Web favicon、Desktop bundle、README 或产品 UI 已经使用这些素材。
+本目录保存 AreaFlow 当前品牌素材包。机器可读规格位于上一级 \`brand-manifest.json\`，生成、验证与持续门禁见上一级 \`README.md\`。
 
 ## 目录
 
@@ -370,9 +370,17 @@ const readme = `# AreaFlow Brand Assets
 | Control Mist | \`#F4FBF8\` | 深色背景文字 |
 | Surface Mist | \`#F1FAF7\` | 浅色图标底板 |
 
-## 接入说明
+## 生成与校验
 
-品牌素材与运行时接入分开管理。接入 Web favicon、PWA manifest、Desktop bundle、README 或产品导航时，需要作为独立 UI/打包变更验证。
+\`\`\`bash
+npm ci
+npm run brand:export
+npm run brand:validate
+\`\`\`
+
+生成器读取 \`brand-manifest.json\` 的尺寸、透明度、平台来源和印刷 DPI；校验器覆盖全部清单输出、原生包、印刷包和目录卫生。
+
+默认导出只补齐缺失文件；需要从当前 SVG 全量重建时运行 \`npm run brand:export -- --refresh\`。
 `;
 
 const nativeReadme = `# AreaFlow Native Icons
@@ -384,7 +392,7 @@ const nativeReadme = `# AreaFlow Native Icons
 - \`android/res/\`：把目录内容合并到 Android 工程 \`app/src/main/res/\`；\`ic_launcher.xml\` 和 \`ic_launcher_round.xml\` 使用同一安全区前景。
 - \`windows/AreaFlow.ico\`：包含 \`16/24/32/48/64/128/256\`，用于 Windows 可执行文件和快捷方式。
 
-这些文件由 \`node scripts/generate-areaflow-brand-assets.cjs\` 从当前品牌源重建。更新品牌源后应重新执行生成器并完成尺寸、透明度和平台格式验证。
+这些文件由 \`npm run brand:export\` 从当前品牌源和机器清单重建。更新品牌源后运行生成器，再运行 \`npm run brand:validate\`。
 `;
 
 const printReadme = `# AreaFlow Print Assets

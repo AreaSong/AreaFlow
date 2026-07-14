@@ -7,4 +7,4 @@
 - `android/res/`：把目录内容合并到 Android 工程 `app/src/main/res/`；`ic_launcher.xml` 和 `ic_launcher_round.xml` 使用同一安全区前景。
 - `windows/AreaFlow.ico`：包含 `16/24/32/48/64/128/256`，用于 Windows 可执行文件和快捷方式。
 
-这些文件由 `node scripts/generate-areaflow-brand-assets.cjs` 从当前品牌源重建。更新品牌源后应重新执行生成器并完成尺寸、透明度和平台格式验证。
+这些文件由 `npm run brand:export` 从当前品牌源和机器清单重建。更新品牌源后运行生成器，再运行 `npm run brand:validate`。

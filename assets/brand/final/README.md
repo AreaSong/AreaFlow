@@ -1,6 +1,6 @@
 # AreaFlow Brand Assets
 
-本目录保存 AreaFlow 当前品牌素材包。它是仓库内设计素材，不是 Web runtime 资源入口；文件存在不代表 Web favicon、Desktop bundle、README 或产品 UI 已经使用这些素材。
+本目录保存 AreaFlow 当前品牌素材包。机器可读规格位于上一级 `brand-manifest.json`，生成、验证与持续门禁见上一级 `README.md`。
 
 ## 目录
 
@@ -51,6 +51,14 @@
 | Control Mist | `#F4FBF8` | 深色背景文字 |
 | Surface Mist | `#F1FAF7` | 浅色图标底板 |
 
-## 接入说明
+## 生成与校验
 
-品牌素材与运行时接入分开管理。接入 Web favicon、PWA manifest、Desktop bundle、README 或产品导航时，需要作为独立 UI/打包变更验证。
+```bash
+npm ci
+npm run brand:export
+npm run brand:validate
+```
+
+生成器读取 `brand-manifest.json` 的尺寸、透明度、平台来源和印刷 DPI；校验器覆盖全部清单输出、原生包、印刷包和目录卫生。
+
+默认导出只补齐缺失文件；需要从当前 SVG 全量重建时运行 `npm run brand:export -- --refresh`。

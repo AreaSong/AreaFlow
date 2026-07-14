@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "brand": "AreaFlow",
+  "packageRoot": "assets/brand/final",
+  "themes": ["dark", "light"],
+  "themedSquareFamilies": [
+    {
+      "id": "app-icon",
+      "source": "areaflow-app-icon-{theme}.svg",
+      "smallSource": "areaflow-app-icon-small-{theme}.svg",
+      "smallSizes": [16, 32, 48],
+      "sizes": [16, 32, 48, 64, 128, 180, 192, 256, 512, 1024],
+      "output": "app-icon/areaflow-app-icon-{theme}-{size}.png",
+      "alpha": true
+    },
+    {
+      "id": "opaque-app-icon",
+      "source": "areaflow-app-icon-opaque-{theme}.svg",
+      "sizes": [180, 1024],
+      "output": "app-icon/areaflow-app-icon-opaque-{theme}-{size}.png",
+      "alpha": false
+    },
+    {
+      "id": "maskable-app-icon",
+      "source": "areaflow-app-icon-maskable-{theme}.svg",
+      "sizes": [192, 512],
+      "output": "app-icon/areaflow-app-icon-maskable-{theme}-{size}.png",
+      "alpha": false
+    },
+    {
+      "id": "logo-mark",
+      "source": "areaflow-logo-mark-{theme}.svg",
+      "sizes": [256, 512, 1024],
+      "output": "mark/areaflow-logo-mark-{theme}-{size}.png",
+      "alpha": true
+    },
+    {
+      "id": "mono-logo-mark",
+      "source": "areaflow-logo-mark-mono-{theme}.svg",
+      "sizes": [256, 512, 1024],
+      "output": "mark/areaflow-logo-mark-mono-{theme}-{size}.png",
+      "alpha": true
+    },
+    {
+      "id": "logo-symbol",
+      "source": "areaflow-logo-symbol-{theme}.svg",
+      "sizes": [256, 512, 1024],
+      "output": "symbol/areaflow-logo-symbol-{theme}-{size}.png",
+      "alpha": true
+    }
+  ],
+  "fixedRasterExports": [
+    { "source": "areaflow-logo-lockup.svg", "output": "lockup/areaflow-logo-lockup-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-dark.svg", "output": "lockup/areaflow-logo-lockup-dark-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-light.svg", "output": "lockup/areaflow-logo-lockup-light-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-outlined.svg", "output": "lockup/areaflow-logo-lockup-outlined-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-outlined-dark.svg", "output": "lockup/areaflow-logo-lockup-outlined-dark-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-outlined-light.svg", "output": "lockup/areaflow-logo-lockup-outlined-light-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-mono-dark.svg", "output": "lockup/areaflow-logo-lockup-mono-dark-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-logo-lockup-mono-light.svg", "output": "lockup/areaflow-logo-lockup-mono-light-1600x520.png", "width": 1600, "height": 520, "alpha": true },
+    { "source": "areaflow-wordmark-dark.svg", "output": "wordmark/areaflow-wordmark-dark-1200x336.png", "width": 1200, "height": 336, "alpha": true },
+    { "source": "areaflow-wordmark-light.svg", "output": "wordmark/areaflow-wordmark-light-1200x336.png", "width": 1200, "height": 336, "alpha": true },
+    { "source": "areaflow-logo-stacked-dark.svg", "output": "stacked/areaflow-logo-stacked-dark-1024.png", "width": 1024, "height": 1024, "alpha": true },
+    { "source": "areaflow-logo-stacked-light.svg", "output": "stacked/areaflow-logo-stacked-light-1024.png", "width": 1024, "height": 1024, "alpha": true },
+    { "source": "social/areaflow-social-preview-dark.svg", "output": "social/areaflow-social-preview-dark.png", "width": 1200, "height": 630, "alpha": true },
+    { "source": "social/areaflow-social-preview-light.svg", "output": "social/areaflow-social-preview-light.png", "width": 1200, "height": 630, "alpha": true },
+    { "source": "social/areaflow-social-preview.svg", "output": "social/areaflow-social-preview.png", "width": 1200, "height": 630, "alpha": true }
+  ],
+  "favicon": {
+    "source": "areaflow-app-icon-small-light.svg",
+    "sizes": [16, 32, 48],
+    "output": "favicon/areaflow-favicon-{size}.png",
+    "ico": "favicon/areaflow-favicon.ico"
+  },
+  "overview": {
+    "output": "areaflow-brand-overview.png",
+    "width": 1600,
+    "height": 1200
+  },
+  "native": {
+    "macosSource": "app-icon/areaflow-app-icon-opaque-dark-1024.png",
+    "iosSource": "app-icon/areaflow-app-icon-opaque-dark-1024.png",
+    "androidForegroundSource": "symbol/areaflow-logo-symbol-light-1024.png",
+    "androidBackground": "#07191D",
+    "windowsSource": "app-icon/areaflow-app-icon-opaque-dark-1024.png",
+    "printLightSource": "areaflow-logo-lockup-outlined-light.svg",
+    "printDarkSource": "areaflow-logo-lockup-outlined-dark.svg",
+    "printDpi": 300
+  }
+}
