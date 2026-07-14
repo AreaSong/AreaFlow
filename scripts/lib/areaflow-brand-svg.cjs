@@ -246,9 +246,11 @@ function stackedSvg(target) {
 function socialSvg(target) {
   const dark = target === "dark";
   const bg = dark ? COLORS.darkBg : COLORS.lightBg;
-  const surface = dark ? COLORS.darkSurface : COLORS.lightSurface;
+  const graphBg = dark ? "#0D3034" : "#E7F4F0";
   const text = dark ? COLORS.white : COLORS.ink;
   const muted = dark ? "#9FC4C3" : COLORS.inkMuted;
+  const pillBg = dark ? COLORS.white : COLORS.darkBg;
+  const pillText = dark ? COLORS.ink : COLORS.white;
   const gradientId = `social-flow-${target}`;
   return doc(
     "0 0 1200 630",
@@ -256,22 +258,23 @@ function socialSvg(target) {
     "AreaFlow social preview describing AI development orchestration and auditable delivery.",
     `  <defs>${wordGradient(gradientId)}<pattern id="grid-${target}" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="${dark ? "#21464A" : "#CFE5E0"}" stroke-width="1"/></pattern></defs>
   <rect width="1200" height="630" fill="${bg}"/>
-  <rect x="36" y="36" width="1128" height="558" rx="28" fill="${surface}"${dark ? "" : " stroke=\"#D6E9E4\" stroke-width=\"2\""}/>
-  <svg x="72" y="62" width="94" height="94" viewBox="0 0 512 512">${iconInner(target, "regular", `social-icon-${target}`)}</svg>
-  <g transform="translate(190 62) scale(0.42)">${outlinedWordPaths(text, gradientId)}</g>
-  <path d="M190 126H420" stroke="${dark ? "#557579" : "#A9C8C4"}" stroke-width="5" stroke-linecap="round"/>
-  <path d="M190 126C250 126 306 115 360 116C390 117 410 122 420 126" fill="none" stroke="${COLORS.cyan}" stroke-width="5" stroke-linecap="round"/>
-  <text x="78" y="236" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="${COLORS.cyan}">AI 开发执行治理平台</text>
-  <text x="78" y="306" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="42" font-weight="700" fill="${text}">把需求编排成可审计的软件交付</text>
-  <text x="78" y="360" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="22" fill="${muted}">项目 · Workflow · Run · Worker · Artifact · 审批 · 审计</text>
-  <rect x="78" y="436" width="282" height="48" rx="24" fill="${dark ? "#12393D" : "#E3F5F0"}"/>
-  <circle cx="106" cy="460" r="7" fill="${COLORS.mint}"/>
-  <text x="126" y="468" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="${text}">AI Development Control Plane</text>
-  <rect x="650" y="80" width="450" height="470" rx="24" fill="url(#grid-${target})"/>
-  <path d="M696 478C748 446 777 391 817 350C864 302 915 310 952 251C978 210 1008 169 1064 136" fill="none" stroke="${dark ? "#244F53" : "#B8D8D2"}" stroke-width="24" stroke-linecap="round"/>
-  <path d="M696 478C748 446 777 391 817 350C864 302 915 310 952 251C978 210 1008 169 1064 136" fill="none" stroke="url(#${gradientId})" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="696" cy="478" r="17" fill="${COLORS.mint}"/><circle cx="817" cy="350" r="15" fill="${text}" stroke="${bg}" stroke-width="6"/><circle cx="952" cy="251" r="17" fill="${COLORS.amber}"/><circle cx="1064" cy="136" r="19" fill="${COLORS.coral}"/>
-  <g fill="none" stroke="${dark ? "#315D61" : "#A9CDC6"}" stroke-width="2"><rect x="704" y="122" width="72" height="72"/><rect x="744" y="162" width="72" height="72"/><rect x="1002" y="420" width="72" height="72"/><rect x="1034" y="452" width="72" height="72"/></g>`,
+  <rect x="650" width="550" height="630" fill="${graphBg}"/>
+  <rect x="650" width="550" height="630" fill="url(#grid-${target})"/>
+  <svg x="90" y="72" width="150" height="150" viewBox="0 0 512 512">${iconInner(target, "regular", `social-icon-${target}`)}</svg>
+  <g transform="translate(280 78) scale(0.52)">${outlinedWordPaths(text, gradientId)}</g>
+  <path d="M280 168H565" stroke="${dark ? "#557579" : "#A9C8C4"}" stroke-width="5" stroke-linecap="round"/>
+  <path d="M280 168C350 168 415 154 478 157C520 159 548 164 565 168" fill="none" stroke="${COLORS.cyan}" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="390" cy="164" r="6" fill="${COLORS.amber}"/><circle cx="565" cy="168" r="6" fill="${text}"/>
+  <text x="90" y="284" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="${COLORS.cyan}">AI 开发执行治理平台</text>
+  <text x="90" y="350" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="40" font-weight="700" fill="${text}">把需求编排成可审计的软件交付</text>
+  <text x="90" y="405" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="22" fill="${muted}">项目 · Workflow · Run · Worker · Artifact · 审批 · 审计</text>
+  <rect x="90" y="510" width="350" height="56" rx="28" fill="${pillBg}"/>
+  <circle cx="120" cy="538" r="8" fill="${COLORS.mint}"/>
+  <text x="143" y="546" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="${pillText}">AI Development Control Plane</text>
+  <path d="M708 514C762 480 795 422 837 378C884 329 930 334 972 268C1003 219 1037 165 1090 118" fill="none" stroke="${dark ? "#244F53" : "#FFFFFF"}" stroke-width="26" stroke-linecap="round"/>
+  <path d="M708 514C762 480 795 422 837 378C884 329 930 334 972 268C1003 219 1037 165 1090 118" fill="none" stroke="url(#${gradientId})" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="708" cy="514" r="18" fill="${COLORS.mint}" stroke="${dark ? "#12393D" : "#FFFFFF"}" stroke-width="7"/><circle cx="837" cy="378" r="16" fill="${text}" stroke="${graphBg}" stroke-width="7"/><circle cx="972" cy="268" r="18" fill="${COLORS.amber}" stroke="${dark ? "#12393D" : "#FFFFFF"}" stroke-width="7"/><circle cx="1090" cy="118" r="20" fill="${COLORS.coral}" stroke="${dark ? "#12393D" : "#FFFFFF"}" stroke-width="7"/>
+  <g fill="none" stroke="${dark ? "#315D61" : "#8DBEB6"}" stroke-width="2"><rect x="734" y="112" width="86" height="86"/><rect x="780" y="156" width="86" height="86"/><rect x="1028" y="430" width="92" height="92"/><rect x="1070" y="474" width="92" height="92"/></g>`,
   );
 }
 
@@ -372,13 +375,40 @@ const readme = `# AreaFlow Brand Assets
 品牌素材与运行时接入分开管理。接入 Web favicon、PWA manifest、Desktop bundle、README 或产品导航时，需要作为独立 UI/打包变更验证。
 `;
 
+const nativeReadme = `# AreaFlow Native Icons
+
+本目录保存从品牌 opaque icon 和透明 Symbol 生成的原生平台交付文件。
+
+- \`macos/AreaFlow.icns\`：直接设置为 macOS 应用图标；\`.iconset\` 保留 Xcode 和重新打包所需的源尺寸。
+- \`ios/AreaFlowAppIcon.appiconset/\`：复制到 Xcode asset catalog，包含 iPhone、iPad 与 App Store marketing 槽位。
+- \`android/res/\`：把目录内容合并到 Android 工程 \`app/src/main/res/\`；\`ic_launcher.xml\` 和 \`ic_launcher_round.xml\` 使用同一安全区前景。
+- \`windows/AreaFlow.ico\`：包含 \`16/24/32/48/64/128/256\`，用于 Windows 可执行文件和快捷方式。
+
+这些文件由 \`node scripts/generate-areaflow-brand-assets.cjs\` 从当前品牌源重建。更新品牌源后应重新执行生成器并完成尺寸、透明度和平台格式验证。
+`;
+
+const printReadme = `# AreaFlow Print Assets
+
+## 文件选择
+
+- \`*.svg\`：轮廓化矢量源，适合排版、缩放和专业设计工具。
+- \`*.pdf\`：可直接预览和交换的单页文件；dark 版本包含品牌深色背景，保证反白字标可见。
+- \`*-cmyk.tiff\`：\`3600x1170\`、300 DPI、LZW 压缩的 CMYK 位图，用于不接收 SVG/PDF 的印刷流程。
+
+CMYK 文件是从 sRGB 品牌色转换的通用起点，正式大批量印刷仍需由印厂按纸张、油墨和设备打样。
+
+本包不提供 EPS。EPS 无法可靠保留当前 Logo 的透明度和渐变。需要旧版设计软件兼容时，应优先导入 outlined SVG 或 PDF，再由目标软件按自身色彩配置导出。
+`;
+
 module.exports = {
   appIconSvg,
   lockupSvg,
   markSvg,
   monoLockupSvg,
   monoMarkSvg,
+  nativeReadme,
   overviewSvg,
+  printReadme,
   readme,
   socialSvg,
   stackedSvg,

@@ -10,7 +10,9 @@ const {
   markSvg,
   monoLockupSvg,
   monoMarkSvg,
+  nativeReadme,
   overviewSvg,
+  printReadme,
   readme,
   socialSvg,
   stackedSvg,
@@ -118,6 +120,8 @@ async function main() {
 
   Object.entries(svgAssets).forEach(([file, svg]) => write(file, svg));
   write("README.md", readme);
+  write("native/README.md", nativeReadme);
+  write("print/README.md", printReadme);
 
   const normalSizes = [16, 32, 48, 64, 128, 180, 192, 256, 512, 1024];
   for (const theme of ["dark", "light"]) {
