@@ -223,7 +223,7 @@ function validateDocumentation(packageRoot, errors) {
   for (const file of required) requireFile(file, errors);
   requireText(path.join(repoRoot, "package.json"), '"brand:export"', errors);
   requireText(path.join(repoRoot, "package.json"), '"brand:validate"', errors);
-  requireText(path.join(repoRoot, "Makefile"), "check: fmt test build web-build docs-check brand-validate", errors);
+  requireText(path.join(repoRoot, "Makefile"), "check: fmt-check test build web-build desktop-build docs-check brand-validate", errors);
   requireText(
     path.join(repoRoot, ".github/workflows/brand-assets.yml"),
     "npm run brand:validate",

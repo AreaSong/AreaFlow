@@ -54,9 +54,12 @@ go fmt ./...
 go test ./...
 go build ./cmd/areaflow
 cd web && npm run build
+cd desktop && npm run build
 ```
 
 Web 交互变更还需要使用真实 API 数据验证所有一级路由、控制台错误、桌面与移动视口。
+
+服务生命周期变更运行 `make smoke-docker-graceful-shutdown`，验证 PostgreSQL readiness、`SIGTERM`、退出码和关闭日志。
 
 ## 代码边界
 

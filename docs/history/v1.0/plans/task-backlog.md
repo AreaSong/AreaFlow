@@ -103,7 +103,7 @@ Inputs:
 - `docs/architecture/security-permissions.md`
 - `docs/architecture/command-approval-contract.md`
 - `docs/architecture/api-surface.md`
-- `docs/adr/0005-phase-0-foundation-baseline.md`
+- `docs/history/v1.0/contracts/phase-0-foundation-baseline.md`
 - `docs/adr/0006-platform-operating-boundary.md`
 - `governance/README.md`
 

@@ -1,5 +1,8 @@
 import type {
   ApprovalRecordsResponse,
+  ApprovalRecord,
+  AuthPrincipal,
+  AuthStatus,
   ArtifactListResponse,
   ArtifactRecord,
   AuditEventsResponse,
@@ -40,24 +43,80 @@ import type {
   WorkflowCollectionResponse,
   WorkflowVersionListResponse,
   WorkflowVersionRunsResponse,
+  TransitionPreviewsResponse,
   RunCollectionResponse,
   WorkerCollectionResponse,
   ArtifactCollectionResponse,
   WorkerDetailResponse,
 } from "./types";
 
+const TOKEN_STORAGE_KEY = "areaflow.api_token";
+const AUTH_INVALID_EVENT = "areaflow:auth-invalid";
+
+function authHeaders(): Record<string, string> {
+  const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function handleUnauthorized(response: Response) {
+  if (response.status !== 401 || !sessionStorage.getItem(TOKEN_STORAGE_KEY)) return;
+  sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   const response = await fetch(path, {
     headers: {
       Accept: "application/json",
+      ...authHeaders(),
     },
   });
 
   if (!response.ok) {
-    throw new Error(`${path} returned ${response.status}`);
+    handleUnauthorized(response);
+    throw new Error(await responseError(response, path));
   }
 
   return (await response.json()) as T;
+}
+
+async function getText(path: string) {
+  const response = await fetch(path, { headers: { Accept: "*/*", ...authHeaders() } });
+  handleUnauthorized(response);
+  if (!response.ok) throw new Error(await responseError(response, path));
+  return {
+    content: await response.text(),
+    contentType: response.headers.get("content-type") ?? "application/octet-stream",
+    sha256: response.headers.get("x-areaflow-artifact-sha256") ?? "",
+  };
+}
+
+async function postJSON<T>(path: string, body: unknown, idempotencyKey: string): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+      ...authHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    handleUnauthorized(response);
+    throw new Error(await responseError(response, path));
+  }
+  return (await response.json()) as T;
+}
+
+async function responseError(response: Response, path: string) {
+  const fallback = `${path} returned ${response.status}`;
+  try {
+    const body = await response.json() as { error?: string };
+    return body.error ? `${body.error} (${response.status})` : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 const API_BASE = "/api/v1";
@@ -76,20 +135,51 @@ function collectionPath(resource: string, options: CollectionOptions = {}) {
   return `${API_BASE}/${resource}${query.size ? `?${query}` : ""}`;
 }
 
+async function getAllCollection<T extends { next_cursor?: string }, K extends keyof T>(
+  resource: string,
+  options: CollectionOptions,
+  itemsKey: K,
+): Promise<T> {
+  let cursor = typeof options.cursor === "string" ? options.cursor : "";
+  let firstPage: T | null = null;
+  const items: unknown[] = [];
+  const seenCursors = new Set<string>();
+
+  do {
+    const page = await getJSON<T>(collectionPath(resource, { limit: 200, ...options, cursor }));
+    firstPage ??= page;
+    const pageItems = page[itemsKey];
+    if (!Array.isArray(pageItems)) throw new Error(`${resource} returned an invalid collection`);
+    items.push(...pageItems);
+
+    const nextCursor = page.next_cursor ?? "";
+    if (nextCursor && seenCursors.has(nextCursor)) throw new Error(`${resource} returned a repeated cursor`);
+    if (nextCursor) seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  } while (cursor);
+
+  if (!firstPage) throw new Error(`${resource} returned no collection page`);
+  return { ...firstPage, [itemsKey]: items, count: items.length, next_cursor: undefined } as T;
+}
+
 export const api = {
+  authStatus: () => getJSON<AuthStatus>(`${API_BASE}/auth/status`),
+  authMe: () => getJSON<AuthPrincipal>(`${API_BASE}/auth/me`),
   projects: () => getJSON<ProjectListResponse>(`${API_BASE}/projects`),
   workflows: (projectKey?: string, options: CollectionOptions = {}) =>
-    getJSON<WorkflowCollectionResponse>(collectionPath("workflows", { limit: 200, project_key: projectKey, ...options })),
+    getAllCollection<WorkflowCollectionResponse, "workflows">("workflows", { project_key: projectKey, ...options }, "workflows"),
   runs: (projectKey?: string, options: CollectionOptions = {}) =>
-    getJSON<RunCollectionResponse>(collectionPath("runs", { limit: 200, project_key: projectKey, ...options })),
+    getAllCollection<RunCollectionResponse, "runs">("runs", { project_key: projectKey, ...options }, "runs"),
   workers: (projectKey?: string, options: CollectionOptions = {}) =>
-    getJSON<WorkerCollectionResponse>(collectionPath("workers", { limit: 200, project_key: projectKey, ...options })),
+    getAllCollection<WorkerCollectionResponse, "workers">("workers", { project_key: projectKey, ...options }, "workers"),
   workerDetail: (projectKey: string, workerID: number) =>
     getJSON<WorkerDetailResponse>(collectionPath(`workers/${workerID}`, { limit: 50, project_key: projectKey })),
   artifacts: (projectKey?: string, options: CollectionOptions = {}) =>
-    getJSON<ArtifactCollectionResponse>(collectionPath("artifacts", { limit: 200, project_key: projectKey, ...options })),
+    getAllCollection<ArtifactCollectionResponse, "artifacts">("artifacts", { project_key: projectKey, ...options }, "artifacts"),
   artifactDetail: (projectKey: string, artifactID: number) =>
     getJSON<ArtifactRecord>(collectionPath(`artifacts/${artifactID}`, { project_key: projectKey })),
+  artifactContent: (projectKey: string, artifactID: number) =>
+    getText(collectionPath(`artifacts/${artifactID}/content`, { project_key: projectKey })),
   projectSummary: (projectKey: string) =>
     getJSON<ProjectSummary>(`${API_BASE}/projects/${projectKey}/summary`),
   projectReadiness: (projectKey: string) =>
@@ -114,6 +204,29 @@ export const api = {
     getJSON<ApprovalRecordsResponse>(
       `${API_BASE}/projects/${projectKey}/workflow-versions/${version}/approvals?limit=20`,
     ),
+  versionTransitionPreviews: (projectKey: string, version: string) =>
+    getJSON<TransitionPreviewsResponse>(
+      `${API_BASE}/projects/${projectKey}/workflow-versions/${version}/transition-previews?limit=20`,
+    ),
+  createApproval: (
+    projectKey: string,
+    version: string,
+    request: { decision: "approved" | "rejected"; reason: string; transitionPreviewID: number; actor: string },
+    idempotencyKey: string,
+  ) => postJSON<ApprovalRecord>(
+    `${API_BASE}/projects/${projectKey}/workflow-versions/${version}/approvals`,
+    {
+      decision: request.decision,
+      approval_kind: "workflow_transition",
+      actor: request.actor,
+      reason: request.reason,
+      risk_level: "medium",
+      idempotency_key: idempotencyKey,
+      transition_preview_id: request.transitionPreviewID,
+      metadata: { source: "areaflow_web" },
+    },
+    idempotencyKey,
+  ),
   versionRuns: (projectKey: string, version: string) =>
     getJSON<WorkflowVersionRunsResponse>(
       `${API_BASE}/projects/${projectKey}/workflow-versions/${version}/runs?limit=20`,
@@ -215,7 +328,14 @@ export const api = {
       `${API_BASE}/projects/${projectKey}/execution-forwarding-v1-rollback-preview`,
     ),
   projectAuditEvents: (projectKey: string, options: CollectionOptions = {}) =>
-    getJSON<AuditEventsResponse>(collectionPath("audit-events", { project_key: projectKey, limit: 200, ...options })),
+    getAllCollection<AuditEventsResponse, "audit_events">("audit-events", { project_key: projectKey, ...options }, "audit_events"),
   projectEvents: (projectKey: string) =>
     getJSON<ProjectEventsResponse>(`${API_BASE}/projects/${projectKey}/events?limit=12`),
+};
+
+export const authSession = {
+  eventName: AUTH_INVALID_EVENT,
+  hasToken: () => Boolean(sessionStorage.getItem(TOKEN_STORAGE_KEY)),
+  setToken: (token: string) => sessionStorage.setItem(TOKEN_STORAGE_KEY, token.trim()),
+  clearToken: () => sessionStorage.removeItem(TOKEN_STORAGE_KEY),
 };

@@ -33,6 +33,25 @@
 - 大内容不直接塞入数据库；数据库保存 metadata、hash、URI 和关联关系。
 - `events` 与 `audit_events` 采用 append-only 思路，历史事实不重写。
 
+## 文档变更规则
+
+- 默认不新增 Markdown；优先更新已经存在的长期源事实，同一事实只能有一个维护位置，其他位置只链接。
+- 用户可见页面或功能变化，更新所属 `docs/guides/**`；API、CLI、配置变化分别更新 `docs/reference/api.md`、`docs/reference/cli.md`、`docs/reference/configuration.md`。
+- 新增或改变领域概念时更新 `docs/concepts/**`；架构与安全不变量变化时更新 `docs/architecture/**`，关键且长期有效的取舍再新增 ADR。
+- 尚未实现且需要独立评审的重大设计进入 `proposals/**`；普通任务拆解、开发步骤和短期排期不创建 proposal。
+- 阶段计划、milestone、实施合同、迁移过程和历史 evidence 只允许作为版本归档进入 `docs/history/<release>/**`，不得进入当前产品导航。
+- 单个功能不得分别创建 plan、progress、evidence、completion、review 等 Markdown。测试日志、截图、命令输出和运行证据进入 CI、测试系统或 artifact store，不在仓库中生成阶段报告。
+
+功能文档描述当前可用行为，至少回答：
+
+1. 功能解决什么问题，主要使用者是谁。
+2. 从哪个页面、命令或 API 进入，以及需要哪些前置条件或权限。
+3. 用户可以执行什么操作，会得到什么结果。
+4. 空状态、失败、阻塞、无权限和重试时如何表现。
+5. 当前限制，以及必要的资源、API、配置、event 或 audit 关联。
+
+完成任务前必须判断用户行为或公开契约是否变化。发生变化时，在同一变更中就地更新对应长期文档；未更新文档时，完成说明必须明确行为与契约没有变化。不得用新增阶段文档替代代码、测试或源事实更新。
+
 ## AreaMatrix 边界
 
 - AreaMatrix 目前仍拥有 `docs/**`、源代码、项目治理规则、发布证据和用户文件安全边界。

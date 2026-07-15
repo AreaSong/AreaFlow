@@ -1,7 +1,11 @@
-.PHONY: test build fmt check docs-check web-install web-build brand-export brand-validate package-a-readiness package-a-dirty-review package-a-source-hash package-a-authorization-packet package-b-readiness package-b-dirty-review package-b-authorization-packet smoke-package-a smoke-docker-package-a smoke-package-b-readiness smoke-docker-package-b-readiness smoke-package-a-fingerprint-parity smoke-docker-package-a-fingerprint-parity smoke-status-projection-schema smoke-fixture smoke-docker-fixture smoke-compatibility-fixture smoke-docker-compatibility-fixture smoke-areamatrix-readonly smoke-docker-areamatrix-readonly smoke-shim-authorization-preflight smoke-docker-shim-authorization-preflight smoke-local smoke-docker smoke-approved-artifact-write smoke-docker-approved-artifact-write smoke-managed-generated-write smoke-docker-managed-generated-write smoke-execution-plan smoke-docker-execution-plan smoke-execution-forwarding-v1-readiness smoke-docker-execution-forwarding-v1-readiness smoke-completion-proof smoke-docker-completion-proof smoke-completion-audit-full-proof smoke-docker-completion-audit-full-proof smoke-completion-audit-release-candidate-snapshot smoke-docker-completion-audit-release-candidate-snapshot smoke-completion-audit-real-identity-readiness smoke-docker-completion-audit-real-identity-readiness smoke-completion-audit-real-identity-protected-path-proof smoke-docker-completion-audit-real-identity-protected-path-proof smoke-completion-audit-real-identity-fixture-snapshot smoke-docker-completion-audit-real-identity-fixture-snapshot smoke-execution-cutover-proof smoke-docker-execution-cutover-proof smoke-validation-proof smoke-docker-validation-proof smoke-source-alignment-proof smoke-docker-source-alignment-proof smoke-task-matrix-proof smoke-docker-task-matrix-proof smoke-security-closure-proof smoke-docker-security-closure-proof smoke-operations-proof smoke-docker-operations-proof smoke-backup-restore-proof smoke-docker-backup-restore-proof smoke-release-packaging-proof smoke-docker-release-packaging-proof smoke-v1-stable-fixture smoke-docker-v1-stable-fixture smoke-project-isolation smoke-docker-project-isolation smoke-web smoke-docker-web smoke-web-areamatrix-readonly smoke-docker-web-areamatrix-readonly
+.PHONY: test build fmt fmt-check check docs-check web-install web-build desktop-install desktop-build brand-export brand-validate package-a-readiness package-a-dirty-review package-a-source-hash package-a-authorization-packet package-b-readiness package-b-dirty-review package-b-authorization-packet smoke-package-a smoke-docker-package-a smoke-package-b-readiness smoke-docker-package-b-readiness smoke-package-a-fingerprint-parity smoke-docker-package-a-fingerprint-parity smoke-status-projection-schema smoke-fixture smoke-docker-fixture smoke-compatibility-fixture smoke-docker-compatibility-fixture smoke-areamatrix-readonly smoke-docker-areamatrix-readonly smoke-shim-authorization-preflight smoke-docker-shim-authorization-preflight smoke-local smoke-docker smoke-approved-artifact-write smoke-docker-approved-artifact-write smoke-managed-generated-write smoke-docker-managed-generated-write smoke-execution-plan smoke-docker-execution-plan smoke-execution-forwarding-v1-readiness smoke-docker-execution-forwarding-v1-readiness smoke-completion-proof smoke-docker-completion-proof smoke-completion-audit-full-proof smoke-docker-completion-audit-full-proof smoke-completion-audit-release-candidate-snapshot smoke-docker-completion-audit-release-candidate-snapshot smoke-completion-audit-real-identity-readiness smoke-docker-completion-audit-real-identity-readiness smoke-completion-audit-real-identity-protected-path-proof smoke-docker-completion-audit-real-identity-protected-path-proof smoke-completion-audit-real-identity-fixture-snapshot smoke-docker-completion-audit-real-identity-fixture-snapshot smoke-execution-cutover-proof smoke-docker-execution-cutover-proof smoke-validation-proof smoke-docker-validation-proof smoke-source-alignment-proof smoke-docker-source-alignment-proof smoke-task-matrix-proof smoke-docker-task-matrix-proof smoke-security-closure-proof smoke-docker-security-closure-proof smoke-operations-proof smoke-docker-operations-proof smoke-backup-restore-proof smoke-docker-backup-restore-proof smoke-release-packaging-proof smoke-docker-release-packaging-proof smoke-v1-stable-fixture smoke-docker-v1-stable-fixture smoke-project-isolation smoke-docker-project-isolation smoke-web smoke-docker-web smoke-web-areamatrix-readonly smoke-docker-web-areamatrix-readonly smoke-graceful-shutdown smoke-docker-graceful-shutdown
 
 fmt:
 	go fmt ./...
+
+fmt-check:
+	@unformatted="$$(gofmt -l $$(git ls-files --cached --others --exclude-standard -- '*.go'))"; \
+	if [ -n "$$unformatted" ]; then echo "Go files require gofmt:"; echo "$$unformatted"; exit 1; fi
 
 test:
 	go test ./...
@@ -15,8 +19,15 @@ web-install:
 web-build:
 	cd web && npm run build
 
+desktop-install:
+	cd desktop && npm install
+
+desktop-build:
+	cd desktop && npm run build
+
 docs-check:
 	node scripts/check-doc-links.mjs
+	node scripts/check-doc-governance.mjs
 
 brand-export:
 	npm run brand:export
@@ -24,7 +35,7 @@ brand-export:
 brand-validate:
 	npm run brand:validate
 
-check: fmt test build web-build docs-check brand-validate
+check: fmt-check test build web-build desktop-build docs-check brand-validate
 
 package-a-readiness:
 	bash scripts/audit-package-a-readiness.sh
@@ -223,6 +234,12 @@ smoke-web:
 
 smoke-docker-web:
 	AREAFLOW_SMOKE_SCRIPT=scripts/smoke-web.sh bash scripts/smoke-docker.sh
+
+smoke-graceful-shutdown:
+	bash scripts/smoke-graceful-shutdown.sh
+
+smoke-docker-graceful-shutdown:
+	AREAFLOW_SMOKE_SCRIPT=scripts/smoke-graceful-shutdown.sh bash scripts/smoke-docker.sh
 
 smoke-web-areamatrix-readonly:
 	bash scripts/smoke-web-areamatrix-readonly.sh

@@ -10,14 +10,14 @@ export function OverviewPage() {
   const { selectedProject, selectedProjectKey } = useProject();
   const overview = useAsyncValue(async () => {
     if (!selectedProjectKey) throw new Error("No project is available");
-    const [summary, readiness, events, workerPool, operations] = await Promise.all([
+    const [summary, readiness, events, runs, workers] = await Promise.all([
       api.projectSummary(selectedProjectKey),
       api.projectReadiness(selectedProjectKey),
       api.projectEvents(selectedProjectKey),
-      api.workerPoolSummary(),
-      api.operationsReadiness(),
+      api.runs(selectedProjectKey),
+      api.workers(selectedProjectKey),
     ]);
-    return { summary, readiness, events, workerPool, operations };
+    return { summary, readiness, events, runs, workers };
   }, [selectedProjectKey]);
 
   return <div className="page"><PageHeader eyebrow="Control plane" title="Overview" description="Current project health, execution capacity, and operational signals." />
@@ -25,8 +25,8 @@ export function OverviewPage() {
       <div className="summary-grid">
         <Metric label="Workflow versions" value={overview.data.summary.inventory.versions} detail={selectedProject?.name} />
         <Metric label="Artifacts" value={overview.data.summary.inventory.artifacts} detail="Indexed metadata" />
-        <Metric label="Queued tasks" value={overview.data.workerPool.total_queued_tasks} detail={`${overview.data.workerPool.total_online_workers} workers online`} />
-        <Metric label="Readiness" value={overview.data.readiness.status} detail={overview.data.operations.status} />
+        <Metric label="Active runs" value={overview.data.runs.runs.filter((item) => ["queued", "running", "cancelling"].includes(item.run.status)).length} detail={`${overview.data.workers.workers.filter((item) => item.worker.status === "online").length} workers online`} />
+        <Metric label="Readiness" value={overview.data.readiness.status} detail={`${overview.data.readiness.items.length} checks`} />
       </div>
       <div className="page-grid two-columns">
         <Section title="Project health" description="Configuration, import, and readiness state.">

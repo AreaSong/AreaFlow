@@ -24,11 +24,15 @@ type Migration struct {
 }
 
 type Status struct {
-	Name    string
-	Applied bool
+	Name           string
+	Applied        bool
+	ChecksumStatus string
+	ExpectedSHA256 string
+	RecordedSHA256 string
 }
 
 const ReleaseExceptionMigrationName = "000012_v1_release_exceptions.sql"
+const ChecksumMigrationName = "000013_v1_migration_checksums.sql"
 const releaseExceptionApprovalLedgerPhase = "remediation"
 
 type ApprovalState struct {
@@ -74,8 +78,12 @@ func Up(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	if err := ensureTable(ctx, pool); err != nil {
 		return nil, err
 	}
+	if err := rejectChecksumMismatch(ctx, pool, migrations); err != nil {
+		return nil, err
+	}
 
 	applied := make([]string, 0, len(migrations))
+	appliedThisRun := make(map[string]string)
 	for _, migration := range migrations {
 		alreadyApplied, err := isApplied(ctx, pool, migration.Name)
 		if err != nil {
@@ -83,6 +91,11 @@ func Up(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 		}
 		if alreadyApplied {
 			continue
+		}
+		if migration.Name > ChecksumMigrationName {
+			if err := requireVerifiedChecksums(ctx, pool, migrations); err != nil {
+				return nil, err
+			}
 		}
 		if migration.Name == ReleaseExceptionMigrationName {
 			approval, err := Approval(ctx, pool, migration.Name)
@@ -97,6 +110,12 @@ func Up(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 			return nil, err
 		}
 		applied = append(applied, migration.Name)
+		appliedThisRun[migration.Name] = migrationHash(migration.SQL)
+		if migration.Name == ChecksumMigrationName {
+			if err := recordAppliedRunHashes(ctx, pool, appliedThisRun); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return applied, nil
 }
@@ -282,18 +301,132 @@ func Statuses(ctx context.Context, pool *pgxpool.Pool) ([]Status, error) {
 		return nil, err
 	}
 
+	checksumColumns, err := checksumColumnsExist(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
 	statuses := make([]Status, 0, len(migrations))
 	for _, migration := range migrations {
 		applied, err := isApplied(ctx, pool, migration.Name)
 		if err != nil {
 			return nil, err
 		}
-		statuses = append(statuses, Status{
-			Name:    migration.Name,
-			Applied: applied,
-		})
+		status := Status{Name: migration.Name, Applied: applied, ExpectedSHA256: migrationHash(migration.SQL)}
+		switch {
+		case !applied:
+			status.ChecksumStatus = "pending"
+		case !checksumColumns:
+			status.ChecksumStatus = "legacy_unverified"
+		default:
+			if err := pool.QueryRow(ctx, `SELECT COALESCE(sha256, '') FROM schema_migrations WHERE name = $1`, migration.Name).Scan(&status.RecordedSHA256); err != nil {
+				return nil, fmt.Errorf("load migration checksum %s: %w", migration.Name, err)
+			}
+			if status.RecordedSHA256 == "" {
+				status.ChecksumStatus = "legacy_unverified"
+			} else if status.RecordedSHA256 == status.ExpectedSHA256 {
+				status.ChecksumStatus = "verified"
+			} else {
+				status.ChecksumStatus = "mismatch"
+			}
+		}
+		statuses = append(statuses, status)
 	}
 	return statuses, nil
+}
+
+func MigrationSetDigest() (string, error) {
+	migrations, err := List()
+	if err != nil {
+		return "", err
+	}
+	parts := make([]string, 0, len(migrations))
+	for _, migration := range migrations {
+		parts = append(parts, migration.Name+":"+migrationHash(migration.SQL))
+	}
+	return migrationHash(strings.Join(parts, "\n")), nil
+}
+
+func AttestLegacyHashes(ctx context.Context, pool *pgxpool.Pool, actor string, reason string, expectedSetDigest string) (int64, error) {
+	actor = strings.TrimSpace(actor)
+	reason = strings.TrimSpace(reason)
+	expectedSetDigest = strings.TrimSpace(expectedSetDigest)
+	if actor == "" || reason == "" || expectedSetDigest == "" {
+		return 0, fmt.Errorf("actor, reason and expected migration set digest are required")
+	}
+	currentSetDigest, err := MigrationSetDigest()
+	if err != nil {
+		return 0, err
+	}
+	if expectedSetDigest != currentSetDigest {
+		return 0, fmt.Errorf("migration set digest mismatch: expected %s, current %s", expectedSetDigest, currentSetDigest)
+	}
+	migrations, err := List()
+	if err != nil {
+		return 0, err
+	}
+	if err := requireChecksumColumns(ctx, pool); err != nil {
+		return 0, err
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin migration checksum attestation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	embedded := make(map[string]string, len(migrations))
+	for _, migration := range migrations {
+		embedded[migration.Name] = migrationHash(migration.SQL)
+	}
+	rows, err := tx.Query(ctx, `SELECT name, COALESCE(sha256, '') FROM schema_migrations ORDER BY name FOR UPDATE`)
+	if err != nil {
+		return 0, fmt.Errorf("lock schema migrations for attestation: %w", err)
+	}
+	type legacyHash struct{ name, hash string }
+	legacy := []legacyHash{}
+	for rows.Next() {
+		var name, recorded string
+		if err := rows.Scan(&name, &recorded); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan schema migration for attestation: %w", err)
+		}
+		expected, ok := embedded[name]
+		if !ok {
+			rows.Close()
+			return 0, fmt.Errorf("applied migration is missing from embedded set: %s", name)
+		}
+		if recorded != "" && recorded != expected {
+			rows.Close()
+			return 0, fmt.Errorf("migration checksum mismatch for %s", name)
+		}
+		if recorded == "" {
+			legacy = append(legacy, legacyHash{name: name, hash: expected})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, fmt.Errorf("list schema migrations for attestation: %w", err)
+	}
+	rows.Close()
+	for _, item := range legacy {
+		if _, err := tx.Exec(ctx, `UPDATE schema_migrations SET sha256 = $2, hash_algorithm = 'sha256', hash_recorded_at = now() WHERE name = $1 AND sha256 IS NULL`, item.name, item.hash); err != nil {
+			return 0, fmt.Errorf("attest migration checksum %s: %w", item.name, err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE migration_ledger SET migration_hash = $2, evidence_json = evidence_json || jsonb_build_object('checksum_attested', true, 'migration_set_digest', $3::text), updated_at = now() WHERE migration_name = $1 AND phase = 'verify'`, item.name, item.hash, currentSetDigest); err != nil {
+			return 0, fmt.Errorf("record migration checksum ledger attestation %s: %w", item.name, err)
+		}
+	}
+	var actorID int64
+	if err := tx.QueryRow(ctx, `INSERT INTO actors (kind, display_name, external_key) VALUES ('user', $1, $2) ON CONFLICT (external_key) WHERE external_key IS NOT NULL DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id`, actor, "migration-attestation:"+actor).Scan(&actorID); err != nil {
+		return 0, fmt.Errorf("ensure migration attestation actor: %w", err)
+	}
+	metadata, _ := json.Marshal(map[string]any{"migration_set_digest": currentSetDigest, "attested_count": len(legacy), "hash_algorithm": "sha256"})
+	if _, err := tx.Exec(ctx, `INSERT INTO audit_events (actor_id, action, capability, resource_type, resource, decision, reason, metadata) VALUES ($1, 'migration.checksum.attest', 'migration_security', 'schema_migrations', $2, 'allowed', $3, $4::jsonb)`, actorID, currentSetDigest, reason, string(metadata)); err != nil {
+		return 0, fmt.Errorf("audit migration checksum attestation: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit migration checksum attestation: %w", err)
+	}
+	return int64(len(legacy)), nil
 }
 
 func ensureTable(ctx context.Context, pool *pgxpool.Pool) error {
@@ -337,7 +470,17 @@ func apply(ctx context.Context, pool *pgxpool.Pool, migration Migration) error {
 	if _, err := tx.Exec(ctx, migration.SQL); err != nil {
 		return fmt.Errorf("apply migration %s: %w", migration.Name, err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (name) VALUES ($1)`, migration.Name); err != nil {
+	checksumColumns, err := checksumColumnsExistTx(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("check checksum columns after %s: %w", migration.Name, err)
+	}
+	insertSQL := `INSERT INTO schema_migrations (name) VALUES ($1)`
+	args := []any{migration.Name}
+	if checksumColumns {
+		insertSQL = `INSERT INTO schema_migrations (name, sha256, hash_algorithm, hash_recorded_at) VALUES ($1, $2, 'sha256', now())`
+		args = append(args, migrationHash(migration.SQL))
+	}
+	if _, err := tx.Exec(ctx, insertSQL, args...); err != nil {
 		return fmt.Errorf("record migration %s: %w", migration.Name, err)
 	}
 	ledgerAvailable, err = migrationLedgerTableExists(ctx, tx)
@@ -360,6 +503,80 @@ func apply(ctx context.Context, pool *pgxpool.Pool, migration Migration) error {
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit migration %s: %w", migration.Name, err)
+	}
+	return nil
+}
+
+func checksumColumnsExist(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'sha256')`).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check schema migration checksum columns: %w", err)
+	}
+	return exists, nil
+}
+
+func checksumColumnsExistTx(ctx context.Context, tx pgx.Tx) (bool, error) {
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'sha256')`).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+func requireChecksumColumns(ctx context.Context, pool *pgxpool.Pool) error {
+	exists, err := checksumColumnsExist(ctx, pool)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("migration checksum schema is not applied; run areaflow migrate up first")
+	}
+	return nil
+}
+
+func rejectChecksumMismatch(ctx context.Context, pool *pgxpool.Pool, migrations []Migration) error {
+	exists, err := checksumColumnsExist(ctx, pool)
+	if err != nil || !exists {
+		return err
+	}
+	for _, migration := range migrations {
+		var recorded string
+		err := pool.QueryRow(ctx, `SELECT COALESCE(sha256, '') FROM schema_migrations WHERE name = $1`, migration.Name).Scan(&recorded)
+		if err == pgx.ErrNoRows || recorded == "" {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("load migration checksum %s: %w", migration.Name, err)
+		}
+		if recorded != migrationHash(migration.SQL) {
+			return fmt.Errorf("migration checksum mismatch for %s", migration.Name)
+		}
+	}
+	return nil
+}
+
+func requireVerifiedChecksums(ctx context.Context, pool *pgxpool.Pool, migrations []Migration) error {
+	if err := requireChecksumColumns(ctx, pool); err != nil {
+		return err
+	}
+	if err := rejectChecksumMismatch(ctx, pool, migrations); err != nil {
+		return err
+	}
+	var legacyCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations WHERE sha256 IS NULL`).Scan(&legacyCount); err != nil {
+		return fmt.Errorf("count legacy migration checksums: %w", err)
+	}
+	if legacyCount > 0 {
+		return fmt.Errorf("%d applied migrations are legacy_unverified; run explicit checksum attestation before applying new migrations", legacyCount)
+	}
+	return nil
+}
+
+func recordAppliedRunHashes(ctx context.Context, pool *pgxpool.Pool, applied map[string]string) error {
+	for name, hash := range applied {
+		if _, err := pool.Exec(ctx, `UPDATE schema_migrations SET sha256 = $2, hash_algorithm = 'sha256', hash_recorded_at = now() WHERE name = $1 AND sha256 IS NULL`, name, hash); err != nil {
+			return fmt.Errorf("record same-run migration checksum %s: %w", name, err)
+		}
 	}
 	return nil
 }

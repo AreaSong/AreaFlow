@@ -32,6 +32,10 @@ Project identity 贯穿 workflow、run、worker、lease、artifact、event 和 a
 
 ## Web
 
-Web 当前通过 write action gate 保持读操作优先。后端写 endpoint 的存在不代表浏览器可以直接调用；开放前必须统一 confirmation、idempotency、approval 和 audit 契约。
+Web 支持本机 token 登录，token 只保存在当前标签页的 `sessionStorage`，不会进入 URL 或 `localStorage`。`401` 会清除失效 token。
+
+当前 token 写面只开放 authored workflow 的 approval/rejection。服务端强制 project/capability scope、principal actor 和 idempotency；按钮可见性不是授权边界。Run control、project write、worker command、engine、secret、publish 和 restore apply 不会因 token 认证启用而自动开放。
+
+`runs`、`events` 和 `audit_events` 保存 `project_key_snapshot`。项目被清理后外键可以置空，但 append-only 历史仍保留原项目归属。
 
 治理规则见 [`../../governance/security/`](../../governance/security/) 和 [`../../governance/permissions/`](../../governance/permissions/)。

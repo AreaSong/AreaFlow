@@ -2,6 +2,16 @@
 
 AreaFlow 通过 `areaflow.yaml` 接入项目。示例见 [`../../examples/areamatrix/areaflow.yaml`](../../examples/areamatrix/areaflow.yaml)。
 
+## 服务环境变量
+
+- `AREAFLOW_DATABASE_URL`：PostgreSQL 连接串。
+- `AREAFLOW_HOST`：API 监听地址，只接受 `localhost` 或 loopback IP；默认 `127.0.0.1`。
+- `AREAFLOW_PORT`：API 监听端口；默认 `3847`。
+- `AREAFLOW_AUTH_MODE`：`disabled` 或 `token`；默认 `disabled`。设为 `token` 时，除 health、ready 和 auth status 外，API 都要求 Bearer token。
+- `AREAFLOW_POSTGRES_CONTAINER`：使用 Docker PostgreSQL 时，backup/restore drill 选用同 major version 工具的容器名；默认 `areaflow-postgres`。
+
+Token 认证只用于本机 loopback 控制面；远程监听和 TLS 尚未开放，非 loopback 监听会拒绝启动。
+
 ## 顶级结构
 
 ```yaml

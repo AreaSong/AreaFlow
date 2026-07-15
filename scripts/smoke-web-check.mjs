@@ -68,6 +68,7 @@ try {
     await verifyWorkflowAndRunPages(page, baseURL, projectKey, readyWorkflowLabel);
   }
   await verifyResourceDetailPages(page, baseURL, projectKey);
+  await verifyNotFoundPage(page, baseURL, projectKey);
 
   await verifyMobileLayout(page, baseURL, projectKey);
 
@@ -88,7 +89,7 @@ try {
   if (nonGetAPIRequests.length) throw new Error(`unexpected Web writes: ${nonGetAPIRequests.join(", ")}`);
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join(" | ")}`);
 
-  console.log(`smoke-web-check: ok mode=${mode} routes=8 api_paths=${seenPaths.size}`);
+  console.log(`smoke-web-check: ok mode=${mode} routes=9 api_paths=${seenPaths.size}`);
 } finally {
   await browser.close();
 }
@@ -152,6 +153,14 @@ async function verifyResourceDetailPages(page, baseURL, projectKey) {
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 20000 });
     await page.locator(".resource-detail .content-section h2").first().waitFor({ timeout: 20000 });
+  }
+}
+
+async function verifyNotFoundPage(page, baseURL, projectKey) {
+  await openRoute(page, baseURL, "/route-that-does-not-exist", projectKey, "Page not found");
+  const url = new URL(page.url());
+  if (url.pathname !== "/route-that-does-not-exist") {
+    throw new Error(`unknown route redirected unexpectedly: ${url.pathname}`);
   }
 }
 

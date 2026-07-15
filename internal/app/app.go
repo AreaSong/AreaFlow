@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/areasong/areaflow/internal/api"
+	"github.com/areasong/areaflow/internal/auth"
+	backuppackage "github.com/areasong/areaflow/internal/backup"
 	"github.com/areasong/areaflow/internal/config"
 	"github.com/areasong/areaflow/internal/db"
 	"github.com/areasong/areaflow/internal/doctor"
@@ -3586,6 +3589,8 @@ func (c command) run(ctx context.Context, args []string) error {
 		return c.runSupport(ctx, args[1:])
 	case "backup":
 		return c.runBackup(ctx, args[1:])
+	case "auth":
+		return c.runAuth(ctx, args[1:])
 	case "release":
 		return c.runRelease(ctx, args[1:])
 	case "audit":
@@ -3652,6 +3657,8 @@ Usage:
   areaflow backup manifest --json
   areaflow backup restore-plan
   areaflow backup restore-plan --json
+  areaflow backup create --destination .areaflow/backups/<backup-id> --quiesced
+  areaflow backup drill --package .areaflow/backups/<backup-id> --actor operator --reason "isolated restore verification"
   areaflow release readiness
   areaflow release readiness --project areamatrix
   areaflow release readiness --json
@@ -3720,6 +3727,8 @@ Usage:
   areaflow engine codex-preview areamatrix --json
   areaflow migrate up
   areaflow migrate status
+  areaflow migrate set-digest
+  areaflow migrate attest-legacy-hashes --actor migration-owner --reason "attest reviewed legacy migrations" --expected-set-digest <sha256>
   areaflow project add --config examples/areamatrix/areaflow.yaml
   areaflow project status areamatrix
   areaflow project summary areamatrix
@@ -3852,7 +3861,7 @@ Current product boundaries:
 
 func (c command) runMigrate(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("missing migrate command: use `areaflow migrate up` or `areaflow migrate status`")
+		return fmt.Errorf("missing migrate command: use `up`, `status`, `set-digest`, or `attest-legacy-hashes`")
 	}
 
 	cfg := config.FromEnv()
@@ -3886,8 +3895,30 @@ func (c command) runMigrate(ctx context.Context, args []string) error {
 			if status.Applied {
 				state = "applied"
 			}
-			fmt.Fprintf(c.stdout, "%s %s\n", state, status.Name)
+			fmt.Fprintf(c.stdout, "%s %s checksum=%s\n", state, status.Name, status.ChecksumStatus)
 		}
+		return nil
+	case "set-digest":
+		digest, err := migrate.MigrationSetDigest()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.stdout, digest)
+		return nil
+	case "attest-legacy-hashes":
+		flags := flag.NewFlagSet("migrate attest-legacy-hashes", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		actor := flags.String("actor", "", "audit actor")
+		reason := flags.String("reason", "", "attestation reason")
+		expectedSetDigest := flags.String("expected-set-digest", "", "expected SHA-256 of the embedded migration set")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		count, err := migrate.AttestLegacyHashes(ctx, pool, *actor, *reason, *expectedSetDigest)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(c.stdout, "attested %d legacy migration checksums\n", count)
 		return nil
 	default:
 		return fmt.Errorf("unknown migrate command %q", args[0])
@@ -6102,9 +6133,59 @@ func (c command) runSupport(ctx context.Context, args []string) error {
 
 func (c command) runBackup(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("missing backup command: use `areaflow backup manifest` or `areaflow backup restore-plan`")
+		return fmt.Errorf("missing backup command: use `manifest`, `restore-plan`, `create`, or `drill`")
 	}
 	switch args[0] {
+	case "create":
+		flags := flag.NewFlagSet("backup create", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		destination := flags.String("destination", "", "empty destination directory")
+		quiesced := flags.Bool("quiesced", false, "confirm AreaFlow writers are stopped")
+		jsonOutput := flags.Bool("json", false, "JSON output")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		cfg := config.FromEnv()
+		pool, err := db.Open(ctx, cfg.Database)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		manifest, err := backuppackage.Create(ctx, pool, backuppackage.CreateOptions{Destination: *destination, DatabaseURL: cfg.Database.URL, Quiesced: *quiesced})
+		if err != nil {
+			return err
+		}
+		if *jsonOutput {
+			return c.printJSON(manifest)
+		}
+		fmt.Fprintf(c.stdout, "backup created: id=%s status=%s database_sha256=%s included=%d missing=%d referenced=%d\n", manifest.BackupID, manifest.Status, manifest.Database.SHA256, manifest.IncludedLocalFiles, manifest.MissingLocalFiles, manifest.ReferencedArtifacts)
+		return nil
+	case "drill":
+		flags := flag.NewFlagSet("backup drill", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		packagePath := flags.String("package", "", "backup package directory")
+		drillRoot := flags.String("drill-root", "", "isolated artifact restore root")
+		actor := flags.String("actor", "", "audit actor")
+		reason := flags.String("reason", "", "restore drill reason")
+		jsonOutput := flags.Bool("json", false, "JSON output")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		cfg := config.FromEnv()
+		pool, err := db.Open(ctx, cfg.Database)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		result, err := backuppackage.Drill(ctx, pool, backuppackage.DrillOptions{PackagePath: *packagePath, DatabaseURL: cfg.Database.URL, DrillRoot: *drillRoot, Actor: *actor, Reason: *reason})
+		if err != nil {
+			return err
+		}
+		if *jsonOutput {
+			return c.printJSON(result)
+		}
+		fmt.Fprintf(c.stdout, "backup drill: status=%s backup=%s database=%s artifacts=%d root=%s\n", result.Status, result.BackupID, result.DatabaseName, result.VerifiedFiles, result.ArtifactRoot)
+		return nil
 	case "manifest":
 		flags, err := backupScopeFlagsFromArgs(args[1:], "areaflow backup manifest")
 		if err != nil {
@@ -6150,6 +6231,106 @@ func (c command) runBackup(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf("unknown backup command %q", args[0])
 	}
+}
+
+func (c command) runAuth(ctx context.Context, args []string) error {
+	if len(args) < 2 || args[0] != "token" {
+		return fmt.Errorf("usage: areaflow auth token <create|list|revoke>")
+	}
+	cfg := config.FromEnv()
+	pool, err := db.Open(ctx, cfg.Database)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	service := auth.NewService(pool)
+
+	switch args[1] {
+	case "create":
+		flags := flag.NewFlagSet("auth token create", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		actor := flags.String("actor", "", "audit actor")
+		reason := flags.String("reason", "", "creation reason")
+		expiresAtValue := flags.String("expires-at", "", "RFC3339 expiration")
+		jsonOutput := flags.Bool("json", false, "JSON output")
+		var projects stringListFlag
+		var capabilities stringListFlag
+		flags.Var(&projects, "project", "allowed project key; repeatable, * for all")
+		flags.Var(&capabilities, "capability", "allowed capability; repeatable")
+		if err := flags.Parse(args[2:]); err != nil {
+			return err
+		}
+		var expiresAt *time.Time
+		if strings.TrimSpace(*expiresAtValue) != "" {
+			parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*expiresAtValue))
+			if err != nil {
+				return fmt.Errorf("parse expires-at: %w", err)
+			}
+			expiresAt = &parsed
+		}
+		created, err := service.CreateToken(ctx, auth.CreateTokenOptions{
+			Actor: *actor, Reason: *reason, Projects: projects, Capabilities: capabilities, ExpiresAt: expiresAt,
+		})
+		if err != nil {
+			return err
+		}
+		if *jsonOutput {
+			return c.printJSON(map[string]any{
+				"token": created.Token, "token_key": created.Record.TokenKey, "actor": created.Record.Actor,
+				"projects": created.Record.Projects, "capabilities": created.Record.Capabilities,
+				"expires_at": created.Record.ExpiresAt, "created_at": created.Record.CreatedAt,
+			})
+		}
+		fmt.Fprintf(c.stdout, "token %s\n", created.Token)
+		fmt.Fprintf(c.stdout, "token_key %s\n", created.Record.TokenKey)
+		fmt.Fprintln(c.stdout, "The token is shown once; store it in a secure local credential store.")
+		return nil
+	case "list":
+		jsonOutput, err := outputJSON(args[2:])
+		if err != nil {
+			return err
+		}
+		records, err := service.ListTokens(ctx)
+		if err != nil {
+			return err
+		}
+		if jsonOutput {
+			return c.printJSON(records)
+		}
+		for _, record := range records {
+			fmt.Fprintf(c.stdout, "%s\t%s\t%s\t%s\n", record.TokenKey, record.Status, record.Actor, strings.Join(record.Projects, ","))
+		}
+		return nil
+	case "revoke":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: areaflow auth token revoke <token-key> --actor ACTOR --reason TEXT")
+		}
+		flags := flag.NewFlagSet("auth token revoke", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		actor := flags.String("actor", "", "audit actor")
+		reason := flags.String("reason", "", "revocation reason")
+		if err := flags.Parse(args[3:]); err != nil {
+			return err
+		}
+		if err := service.RevokeToken(ctx, args[2], *actor, *reason); err != nil {
+			return err
+		}
+		fmt.Fprintf(c.stdout, "revoked %s\n", args[2])
+		return nil
+	default:
+		return fmt.Errorf("unknown auth token command %q", args[1])
+	}
+}
+
+type stringListFlag []string
+
+func (f *stringListFlag) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *stringListFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
 }
 
 func (c command) runRelease(ctx context.Context, args []string) error {

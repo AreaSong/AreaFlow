@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/areasong/areaflow/internal/auth"
 	"github.com/areasong/areaflow/internal/config"
 	"github.com/areasong/areaflow/internal/db"
 	"github.com/areasong/areaflow/internal/doctor"
@@ -24,6 +26,16 @@ import (
 type healthResponse struct {
 	Status  string `json:"status"`
 	Service string `json:"service"`
+}
+
+type readinessResponse struct {
+	Status  string            `json:"status"`
+	Service string            `json:"service"`
+	Checks  map[string]string `json:"checks"`
+}
+
+type ReadinessStore interface {
+	Ping(ctx context.Context) error
 }
 
 type ProjectStore interface {
@@ -166,11 +178,23 @@ type AuditEventCollectionStore interface {
 
 type ProjectDoctorRunner func(ctx context.Context, record project.Record, store ProjectStore, allowNative bool) (doctor.Report, error)
 type ProjectImporter func(ctx context.Context, record project.Record, options importer.Options) (importer.Result, error)
+type TokenAuthenticator interface {
+	Authenticate(context.Context, string) (auth.Principal, error)
+}
 
 type Server struct {
-	store        ProjectStore
-	doctorRunner ProjectDoctorRunner
-	importer     ProjectImporter
+	store         ProjectStore
+	doctorRunner  ProjectDoctorRunner
+	importer      ProjectImporter
+	authConfig    config.AuthConfig
+	authenticator TokenAuthenticator
+}
+
+type requestPrincipalKey struct{}
+
+func principalFromContext(ctx context.Context) auth.Principal {
+	principal, _ := ctx.Value(requestPrincipalKey{}).(auth.Principal)
+	return principal
 }
 
 type projectVisibilityScope struct {
@@ -3765,19 +3789,35 @@ type projectPhaseGateResponse struct {
 
 // Serve starts the local AreaFlow API service.
 func Serve(ctx context.Context, cfg config.ServerConfig) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	appCfg := config.FromEnv()
+	if err := appCfg.Auth.Validate(); err != nil {
+		return err
+	}
 	pool, err := db.Open(ctx, appCfg.Database)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	return ServeHandler(ctx, cfg, NewHandlerWithImporter(project.NewStore(pool), func(ctx context.Context, record project.Record, options importer.Options) (importer.Result, error) {
+	slog.Info("AreaFlow API starting", "addr", cfg.Addr())
+	store := project.NewStore(pool)
+	authService := auth.NewService(pool)
+	err = ServeHandler(ctx, cfg, NewHandlerWithAuth(store, func(ctx context.Context, record project.Record, options importer.Options) (importer.Result, error) {
 		return importer.ImportProject(ctx, pool, record, options)
-	}))
+	}, appCfg.Auth, authService))
+	if errors.Is(err, context.Canceled) {
+		slog.Info("AreaFlow API stopped", "reason", "context canceled")
+	}
+	return err
 }
 
 func ServeHandler(ctx context.Context, cfg config.ServerConfig, handler http.Handler) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	server := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           handler,
@@ -3823,9 +3863,23 @@ func NewHandlerWithImporter(store ProjectStore, importer ProjectImporter) http.H
 	return server.handler()
 }
 
+func NewHandlerWithAuth(store ProjectStore, importer ProjectImporter, authConfig config.AuthConfig, authenticator TokenAuthenticator) http.Handler {
+	server := Server{
+		store:         store,
+		doctorRunner:  runProjectDoctor,
+		importer:      importer,
+		authConfig:    authConfig,
+		authenticator: authenticator,
+	}
+	return server.handler()
+}
+
 func (server Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", healthHandler)
+	mux.HandleFunc("/api/ready", server.readinessHandler)
+	mux.HandleFunc("/api/auth/status", server.authStatusHandler)
+	mux.HandleFunc("/api/auth/me", server.authMeHandler)
 	mux.HandleFunc("/api/service/status", server.localServiceStatusHandler)
 	mux.HandleFunc("/api/backup/manifest", server.backupManifestHandler)
 	mux.HandleFunc("/api/backup/restore-plan", server.restorePlanHandler)
@@ -3872,7 +3926,115 @@ func (server Server) handler() http.Handler {
 	mux.HandleFunc("/api/workers/", server.workerDetailHandler)
 	mux.HandleFunc("/api/artifacts", server.artifactCollectionHandler)
 	mux.HandleFunc("/api/artifacts/", server.artifactsHandler)
-	return apiVersionAlias(mux)
+	return apiVersionAlias(server.authMiddleware(mux))
+}
+
+func (s Server) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isPublicAuthPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !s.authConfig.Enabled() {
+			principal := auth.Principal{Actor: "local-user", Projects: []string{"*"}, Capabilities: []string{"*"}}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestPrincipalKey{}, principal)))
+			return
+		}
+		if s.authenticator == nil {
+			writeError(w, http.StatusServiceUnavailable, "token authentication is unavailable")
+			return
+		}
+		rawToken, ok := bearerToken(r.Header.Get("Authorization"))
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "bearer token is required")
+			return
+		}
+		principal, err := s.authenticator.Authenticate(r.Context(), rawToken)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid bearer token")
+			return
+		}
+		requiredCapability := requestCapability(r)
+		if !principal.AllowsCapability(requiredCapability) {
+			writeError(w, http.StatusForbidden, "capability is not allowed")
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && requiredCapability != "workflow.approval.record" {
+			writeError(w, http.StatusForbidden, "write action is not enabled for token authentication")
+			return
+		}
+		projectKey := requestProjectKey(r)
+		if projectKey != "" && !principal.AllowsProject(projectKey) {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		if projectKey == "" && r.URL.Path != "/api/projects" && r.URL.Path != "/api/auth/me" && !principal.AllowsProject("*") {
+			writeError(w, http.StatusForbidden, "global resource access is not allowed")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestPrincipalKey{}, principal)))
+	})
+}
+
+func isPublicAuthPath(path string) bool {
+	return path == "/api/health" || path == "/api/ready" || path == "/api/auth/status"
+}
+
+func bearerToken(header string) (string, bool) {
+	parts := strings.Fields(strings.TrimSpace(header))
+	returnValue := ""
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		returnValue = parts[1]
+	}
+	return returnValue, returnValue != ""
+}
+
+func requestCapability(r *http.Request) string {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		return "read"
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/approvals") {
+		return "workflow.approval.record"
+	}
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/runs/") {
+		return "run.control"
+	}
+	return "admin"
+}
+
+func requestProjectKey(r *http.Request) string {
+	if strings.HasPrefix(r.URL.Path, "/api/projects/") {
+		rest := strings.TrimPrefix(r.URL.Path, "/api/projects/")
+		if rest != "" {
+			projectKey, _, _ := strings.Cut(rest, "/")
+			return projectKey
+		}
+	}
+	return strings.TrimSpace(r.URL.Query().Get("project_key"))
+}
+
+func (s Server) authStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	mode := "disabled"
+	if s.authConfig.Enabled() {
+		mode = "token"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mode": mode, "requires_token": s.authConfig.Enabled()})
+}
+
+func (s Server) authMeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	principal := principalFromContext(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"actor": principal.Actor, "token_key": principal.TokenKey, "projects": principal.Projects,
+		"capabilities": principal.Capabilities, "scope_hash": principal.ScopeHash,
+	})
 }
 
 func apiVersionAlias(next http.Handler) http.Handler {
@@ -3914,6 +4076,31 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(healthResponse{
 		Status:  "ok",
 		Service: "areaflow",
+	})
+}
+
+func (s Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	store, ok := s.store.(ReadinessStore)
+	if !ok {
+		writeJSON(w, http.StatusServiceUnavailable, readinessResponse{
+			Status: "unavailable", Service: "areaflow", Checks: map[string]string{"database": "check unavailable"},
+		})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := store.Ping(ctx); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, readinessResponse{
+			Status: "unavailable", Service: "areaflow", Checks: map[string]string{"database": "unavailable"},
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, readinessResponse{
+		Status: "ready", Service: "areaflow", Checks: map[string]string{"database": "ready"},
 	})
 }
 
@@ -4545,6 +4732,16 @@ func (s Server) projectsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list projects failed")
 		return
+	}
+	principal := principalFromContext(r.Context())
+	if !principal.AllowsProject("*") {
+		filtered := records[:0]
+		for _, record := range records {
+			if principal.AllowsProject(record.Key) {
+				filtered = append(filtered, record)
+			}
+		}
+		records = filtered
 	}
 	writeJSON(w, http.StatusOK, buildProjectListResponse(records))
 }
@@ -7674,15 +7871,30 @@ func (s Server) projectWorkflowVersionApprovalsHandler(w http.ResponseWriter, r 
 			writeError(w, http.StatusBadRequest, "invalid approval request")
 			return
 		}
+		principal := principalFromContext(r.Context())
+		actor := request.Actor
+		idempotencyKey := request.IdempotencyKey
+		metadata := request.Metadata
+		if principal.TokenKey != "" {
+			actor = principal.Actor
+			if idempotencyKey == "" {
+				idempotencyKey = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+			}
+			if idempotencyKey == "" {
+				writeError(w, http.StatusBadRequest, "Idempotency-Key is required")
+				return
+			}
+			metadata = withPrincipalMetadata(metadata, principal)
+		}
 		approval, err := s.store.CreateApprovalRecord(r.Context(), record, label, project.CreateApprovalOptions{
 			Decision:            request.Decision,
 			ApprovalKind:        request.ApprovalKind,
-			Actor:               request.Actor,
+			Actor:               actor,
 			Reason:              request.Reason,
 			RiskLevel:           request.RiskLevel,
-			IdempotencyKey:      request.IdempotencyKey,
+			IdempotencyKey:      idempotencyKey,
 			TransitionPreviewID: request.TransitionPreviewID,
-			Metadata:            request.Metadata,
+			Metadata:            metadata,
 		})
 		if err != nil {
 			s.writeWorkflowVersionCommandError(w, err)
@@ -7692,6 +7904,18 @@ func (s Server) projectWorkflowVersionApprovalsHandler(w http.ResponseWriter, r 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func withPrincipalMetadata(metadata map[string]any, principal auth.Principal) map[string]any {
+	result := make(map[string]any, len(metadata)+4)
+	for key, value := range metadata {
+		result[key] = value
+	}
+	result["auth_mode"] = "token"
+	result["principal_type"] = "api_token"
+	result["token_key"] = principal.TokenKey
+	result["scope_hash"] = principal.ScopeHash
+	return result
 }
 
 func (s Server) projectWorkflowVersionArtifactsHandler(w http.ResponseWriter, r *http.Request, record project.Record, label string) {

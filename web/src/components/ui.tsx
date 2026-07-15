@@ -26,8 +26,8 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   return <div className="message-state error"><AlertTriangle size={18} /><p>{message}</p>{onRetry ? <button className="retry-button" type="button" onClick={onRetry}><RefreshCw size={15} />Retry</button> : null}</div>;
 }
 
-export function EmptyState({ message }: { message: string }) {
-  return <div className="empty-state"><Inbox size={20} /><p>{message}</p></div>;
+export function EmptyState({ message, action }: { message: string; action?: ReactNode }) {
+  return <div className="empty-state"><Inbox size={20} /><p>{message}</p>{action}</div>;
 }
 
 export function DefinitionList({ rows }: { rows: Array<[string, ReactNode]> }) {

@@ -32,11 +32,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         setProjects(result.projects);
         setError("");
-        if (!requestedKey && result.projects[0]) {
-          const next = new URLSearchParams(searchParams);
-          next.set("project", result.projects[0].key);
-          setSearchParams(next, { replace: true });
-        }
       })
       .catch((nextError: unknown) => {
         if (active) setError(errorMessage(nextError));
@@ -48,6 +43,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [attempt]);
+
+  useEffect(() => {
+    if (loading || !projects[0] || projects.some((project) => project.key === requestedKey)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("project", projects[0].key);
+    setSearchParams(next, { replace: true });
+  }, [loading, projects, requestedKey, searchParams, setSearchParams]);
 
   const selectedProject = projects.find((project) => project.key === requestedKey) ?? projects[0] ?? null;
   const selectedProjectKey = selectedProject?.key ?? requestedKey;

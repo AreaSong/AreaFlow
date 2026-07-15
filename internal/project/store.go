@@ -393,6 +393,10 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
+func (s Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 var doctorReportDefaultKeySequence atomic.Int64
 
 const shimReadinessEvidenceCommandType = "project.shim_readiness_evidence.record"

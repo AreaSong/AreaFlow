@@ -9,9 +9,11 @@ import {
   ServerCog,
   Workflow,
   RefreshCw,
+  LogOut,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useProject } from "../context/ProjectContext";
+import { useAuth } from "../context/AuthContext";
 
 const navigation = [
   { to: "/", label: "Overview", icon: Gauge, end: true },
@@ -26,6 +28,8 @@ const navigation = [
 
 export function AppShell() {
   const { projects, selectedProjectKey, setSelectedProjectKey, loading, error, retryProjects } = useProject();
+  const { status, principal, signOut } = useAuth();
+  const visibleNavigation = navigation.filter((item) => item.to !== "/operations" || principal.projects.includes("*"));
 
   return (
     <div className="app-shell">
@@ -49,13 +53,14 @@ export function AppShell() {
         {error ? <div className="sidebar-error"><span>{error}</span><button type="button" onClick={retryProjects} aria-label="Retry project list"><RefreshCw size={14} /></button></div> : null}
 
         <nav className="primary-nav" aria-label="Primary navigation">
-          {navigation.map(({ to, label, icon: Icon, end }) => (
+          {visibleNavigation.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={withProject(to, selectedProjectKey)} end={end} aria-label={label}>
               <Icon size={18} />
               <span>{label}</span>
             </NavLink>
           ))}
         </nav>
+        <div className="auth-summary"><div><strong>{principal.actor}</strong><small>{status.mode === "token" ? principal.token_key : "local mode"}</small></div>{status.requires_token ? <button type="button" onClick={signOut} aria-label="退出登录" title="退出登录"><LogOut size={16} /></button> : null}</div>
       </aside>
       <main className="app-main"><Outlet /></main>
     </div>

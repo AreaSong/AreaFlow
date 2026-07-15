@@ -13,11 +13,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/areasong/areaflow/internal/auth"
 	"github.com/areasong/areaflow/internal/config"
 	"github.com/areasong/areaflow/internal/doctor"
 	"github.com/areasong/areaflow/internal/importer"
 	"github.com/areasong/areaflow/internal/project"
 )
+
+type fakeTokenAuthenticator struct {
+	principal auth.Principal
+	err       error
+	rawToken  string
+}
+
+func (f *fakeTokenAuthenticator) Authenticate(_ context.Context, rawToken string) (auth.Principal, error) {
+	f.rawToken = rawToken
+	if f.err != nil {
+		return auth.Principal{}, f.err
+	}
+	return f.principal, nil
+}
 
 type fakeProjectStore struct {
 	record                        project.Record
@@ -198,7 +213,12 @@ type fakeProjectStore struct {
 	runErr                        error
 	artifactErr                   error
 	artifactContentErr            error
+	pingErr                       error
 	err                           error
+}
+
+func (s fakeProjectStore) Ping(context.Context) error {
+	return s.pingErr
 }
 
 func (s fakeProjectStore) List(context.Context) ([]project.Record, error) {
@@ -1218,6 +1238,106 @@ func TestHealthEndpoint(t *testing.T) {
 	cancel()
 	if err := <-errCh; err != context.Canceled {
 		t.Fatalf("server error = %v, want context.Canceled", err)
+	}
+}
+
+func TestReadinessEndpoint(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		store      fakeProjectStore
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "ready", wantStatus: http.StatusOK, wantBody: `"database":"ready"`},
+		{name: "database unavailable", store: fakeProjectStore{pingErr: errors.New("database unavailable")}, wantStatus: http.StatusServiceUnavailable, wantBody: `"database":"unavailable"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			NewHandler(test.store).ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil))
+			if resp.Code != test.wantStatus || !strings.Contains(resp.Body.String(), test.wantBody) {
+				t.Fatalf("readiness status = %d body=%s", resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestTokenAuthenticationMiddleware(t *testing.T) {
+	store := fakeProjectStore{records: []project.Record{{ID: 1, Key: "area"}, {ID: 2, Key: "other"}}}
+	principal := auth.Principal{
+		TokenID: 1, TokenKey: "token-key", Actor: "operator", Projects: []string{"area"}, Capabilities: []string{"read"}, ScopeHash: "scope-hash",
+	}
+	authenticator := &fakeTokenAuthenticator{principal: principal}
+	handler := NewHandlerWithAuth(store, nil, config.AuthConfig{Mode: "token"}, authenticator)
+
+	statusResp := httptest.NewRecorder()
+	handler.ServeHTTP(statusResp, httptest.NewRequest(http.MethodGet, "/api/v1/auth/status", nil))
+	if statusResp.Code != http.StatusOK || !strings.Contains(statusResp.Body.String(), `"requires_token":true`) {
+		t.Fatalf("auth status = %d body=%s", statusResp.Code, statusResp.Body.String())
+	}
+
+	missingResp := httptest.NewRecorder()
+	handler.ServeHTTP(missingResp, httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil))
+	if missingResp.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token status = %d body=%s", missingResp.Code, missingResp.Body.String())
+	}
+
+	projectsReq := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	projectsReq.Header.Set("Authorization", "Bearer raw-token")
+	projectsResp := httptest.NewRecorder()
+	handler.ServeHTTP(projectsResp, projectsReq)
+	if projectsResp.Code != http.StatusOK || !strings.Contains(projectsResp.Body.String(), `"key":"area"`) || strings.Contains(projectsResp.Body.String(), `"key":"other"`) {
+		t.Fatalf("scoped project list = %d body=%s", projectsResp.Code, projectsResp.Body.String())
+	}
+	if authenticator.rawToken != "raw-token" {
+		t.Fatalf("raw token = %q", authenticator.rawToken)
+	}
+
+	crossProjectReq := httptest.NewRequest(http.MethodGet, "/api/v1/projects/other", nil)
+	crossProjectReq.Header.Set("Authorization", "Bearer raw-token")
+	crossProjectResp := httptest.NewRecorder()
+	handler.ServeHTTP(crossProjectResp, crossProjectReq)
+	if crossProjectResp.Code != http.StatusNotFound {
+		t.Fatalf("cross-project status = %d body=%s", crossProjectResp.Code, crossProjectResp.Body.String())
+	}
+
+	approvalReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/area/workflow-versions/v1/approvals", strings.NewReader(`{}`))
+	approvalReq.Header.Set("Authorization", "Bearer raw-token")
+	approvalResp := httptest.NewRecorder()
+	handler.ServeHTTP(approvalResp, approvalReq)
+	if approvalResp.Code != http.StatusForbidden {
+		t.Fatalf("approval capability status = %d body=%s", approvalResp.Code, approvalResp.Body.String())
+	}
+}
+
+func TestTokenAuthenticationUsesPathProjectScope(t *testing.T) {
+	store := fakeProjectStore{records: []project.Record{{ID: 1, Key: "area"}, {ID: 2, Key: "other"}}}
+	authenticator := &fakeTokenAuthenticator{principal: auth.Principal{
+		TokenKey: "token-key", Actor: "operator", Projects: []string{"area"}, Capabilities: []string{"read"},
+	}}
+	handler := NewHandlerWithAuth(store, nil, config.AuthConfig{Mode: "token"}, authenticator)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/projects/other?project_key=area", nil)
+	request.Header.Set("Authorization", "Bearer raw-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("path project override status = %d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestTokenAuthenticationOnlyEnablesApprovalWrites(t *testing.T) {
+	store := fakeProjectStore{records: []project.Record{{ID: 1, Key: "area"}}}
+	authenticator := &fakeTokenAuthenticator{principal: auth.Principal{
+		TokenKey: "token-key", Actor: "operator", Projects: []string{"area"}, Capabilities: []string{"*"},
+	}}
+	handler := NewHandlerWithAuth(store, nil, config.AuthConfig{Mode: "token"}, authenticator)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/area/import", strings.NewReader(`{"actor":"forged"}`))
+	request.Header.Set("Authorization", "Bearer raw-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("non-approval write status = %d body=%s", response.Code, response.Body.String())
 	}
 }
 

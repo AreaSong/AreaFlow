@@ -13,7 +13,7 @@ active task、不授权执行、不写 AreaMatrix。
 - [`../architecture/security-permissions.md`](../contracts/security-permissions.md)
 - [`../architecture/api-surface.md`](../contracts/api-surface.md)
 - [`../architecture/auth-team-secret-boundary.md`](../../../../proposals/auth-team-secret.md)
-- [`../adr/0005-phase-0-foundation-baseline.md`](../../../adr/0005-phase-0-foundation-baseline.md)
+- [`phase-0-foundation-baseline.md`](../contracts/phase-0-foundation-baseline.md)
 - [`../adr/0006-platform-operating-boundary.md`](../../../adr/0006-platform-operating-boundary.md)
 - [`../../governance/README.md`](../../../../governance/README.md)
 - [`../product/phase-backlog.md`](../plans/phase-backlog.md)

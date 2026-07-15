@@ -42,6 +42,11 @@
 - [品牌素材](../assets/brand/README.md)
 - [ADR](adr/)
 - [治理边界](../governance/README.md)
+
+## 未来方向（非当前能力）
+
+以下内容用于评审尚未实现的方向，不代表 AreaFlow 已经开放对应能力：
+
 - [路线图](roadmap.md)
 - [未来设计 proposals](../proposals/README.md)
 
@@ -52,3 +57,5 @@
 3. ADR 解释关键决策为什么成立，不充当用户指南。
 4. roadmap 和 proposal 只描述未来，不得被当前功能页引用为可用能力。
 5. history 只读保留历史上下文，不参与当前产品导航。
+6. 默认更新现有源事实；不得为单个功能创建 plan、progress、evidence、completion 等阶段文档。
+7. 功能指南描述用途、入口、前置条件、可执行操作、结果、失败与权限表现、当前限制及必要的 API/audit 关联，不记录实现过程。

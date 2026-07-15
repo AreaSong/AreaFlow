@@ -3,8 +3,8 @@
 ## Status
 
 Superseded as an implementation baseline. 本文保留早期地基决策历史；当前产品事实以
-[`docs/README.md`](../README.md)、[`architecture/overview.md`](../architecture/overview.md) 和
-[`concepts/product-model.md`](../concepts/product-model.md) 为准。
+[`docs/README.md`](../../../README.md)、[`architecture/overview.md`](../../../architecture/overview.md) 和
+[`concepts/product-model.md`](../../../concepts/product-model.md) 为准。
 
 ## Context
 

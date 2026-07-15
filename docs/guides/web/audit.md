@@ -10,4 +10,4 @@ Audit 将安全决策和领域事件分开呈现。
 
 记录 project、workflow、run、worker 和 artifact 生命周期中已经发生的事实。
 
-Audit 页面当前按项目读取记录。服务端支持组合过滤和 opaque cursor；Web 使用服务端过滤，并对当前已加载结果提供客户端搜索、排序和分页。审计导出仍需独立契约。
+Audit 页面当前按项目读取记录。服务端支持组合过滤和 opaque cursor；Web 使用服务端过滤并遍历 cursor 链，再提供客户端搜索、排序和分页。审计导出仍需独立契约。

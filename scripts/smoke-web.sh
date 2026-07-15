@@ -518,7 +518,8 @@ AREAFLOW_HOST="${api_host}" \
   AREAFLOW_DATABASE_URL="${AREAFLOW_DATABASE_URL}" \
   "${api_bin}" server >"${api_log}" 2>&1 &
 api_pid=$!
-wait_for_http "http://${api_host}:${api_port}/api/health" "AreaFlow API"
+wait_for_http "http://${api_host}:${api_port}/api/v1/ready" "AreaFlow API readiness"
+curl -fsS "http://${api_host}:${api_port}/api/v1/health" >/dev/null
 
 echo "smoke-web: start Vite ${web_host}:${web_port}"
 (

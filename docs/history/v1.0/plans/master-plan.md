@@ -10,7 +10,7 @@
 - [`platform-blueprint.md`](./platform-blueprint.md)：平台蓝图、长期目录边界和核心模型。
 - [`phase-backlog.md`](./phase-backlog.md)：逐阶段可执行 backlog。
 - [`roadmap.md`](../../../roadmap.md)：当前路线图入口。
-- [`../adr/0005-phase-0-foundation-baseline.md`](../../../adr/0005-phase-0-foundation-baseline.md)：Phase 0 地基 ADR。
+- [`phase-0-foundation-baseline.md`](../contracts/phase-0-foundation-baseline.md)：Phase 0 地基决策归档。
 - [`../adr/0006-platform-operating-boundary.md`](../../../adr/0006-platform-operating-boundary.md)：平台操作边界 ADR。
 - [`../architecture/workflow-engine-contract.md`](../contracts/workflow-engine-contract.md)：workflow engine 契约。
 - [`../architecture/v0.1-import-mirror-contract.md`](../contracts/v0.1-import-mirror-contract.md)：v0.1

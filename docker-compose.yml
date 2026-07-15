@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: areaflow
       POSTGRES_PASSWORD: areaflow
     ports:
-      - "54329:5432"
+      - "127.0.0.1:54329:5432"
     volumes:
       - areaflow-postgres-data:/var/lib/postgresql/data
     healthcheck:

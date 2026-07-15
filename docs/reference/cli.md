@@ -12,7 +12,7 @@ areaflow health
 
 | 命令组 | 用途 |
 |---|---|
-| `migrate` | PostgreSQL schema 初始化和状态 |
+| `migrate` | PostgreSQL schema、checksum 状态和 legacy attestation |
 | `server`、`service` | API 服务和本地状态 |
 | `project` | 项目注册、导入、doctor、readiness 和兼容检查 |
 | `workflow` | profile、版本、stage、gate、transition 和 approval |
@@ -20,7 +20,8 @@ areaflow health
 | `worker` | worker、heartbeat、lease 和受限任务执行 |
 | `artifact` | integrity 和 archive preview |
 | `audit`、`permissions` | 审计覆盖和权限诊断 |
-| `ops`、`backup`、`support` | 运维、备份清单和 support metadata |
+| `ops`、`backup`、`support` | 运维、真实备份包、隔离恢复演练和 support metadata |
+| `auth` | 本机 API token 创建、列表和撤销 |
 | `release`、`completion` | release gate、exception 和完成审计 |
 | `desktop`、`security` | Desktop 与安全边界诊断 |
 
@@ -41,3 +42,36 @@ areaflow health
 部分高风险操作还要求 approval、expected preimage、capability、path 和 rollback 信息。CLI 参数存在不代表操作已开放；最终结果以 permission、gate 和 audit response 为准。
 
 完整实时命令列表以 `areaflow help` 为准。长期应从命令定义生成结构化 reference，避免手工复制帮助文本。
+
+## Token
+
+```bash
+areaflow auth token create --actor operator --reason "web access" \
+  --project areamatrix --capability read --capability workflow.approval.record
+areaflow auth token list --json
+areaflow auth token revoke <token-key> --actor operator --reason "session retired"
+```
+
+明文 token 只在创建时返回一次；数据库只保存 SHA-256。不要把 create 的 JSON 输出写入 CI 日志。
+
+## Migration checksum
+
+`migrate status` 同时显示 `verified`、`legacy_unverified`、`mismatch` 或 `pending`。新 migration 在同一事务写入 SHA-256；历史行只能通过显式 attestation 绑定：
+
+```bash
+digest="$(areaflow migrate set-digest)"
+areaflow migrate attest-legacy-hashes --actor migration-owner \
+  --reason "reviewed embedded migration set" --expected-set-digest "$digest"
+```
+
+## Backup 与 Drill
+
+停止 AreaFlow 写入进程后创建包：
+
+```bash
+areaflow backup create --destination .areaflow/backups/<backup-id> --quiesced
+areaflow backup drill --package .areaflow/backups/<backup-id> \
+  --actor backup-operator --reason "isolated restore verification"
+```
+
+Drill 只恢复到新建的隔离数据库和 artifact root，不覆盖当前数据库或 artifact store。

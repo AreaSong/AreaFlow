@@ -9,7 +9,7 @@ AreaFlow 是独立平台仓库，不是 AreaMatrix 的子模块。AreaMatrix 是
 AreaFlow 从它的 workflow/task-loop 经验中抽象平台能力，但不把 AreaMatrix 的项目事实写死进 core。
 0-100% 总控计划见 [`master-plan.md`](./master-plan.md)。
 Phase 0 的地基决策以
-[`../adr/0005-phase-0-foundation-baseline.md`](../../../adr/0005-phase-0-foundation-baseline.md)
+[`phase-0-foundation-baseline.md`](../contracts/phase-0-foundation-baseline.md)
 为准。逐阶段可执行 backlog 见 [`phase-backlog.md`](./phase-backlog.md)。
 v0.1 Import + Status Mirror 最小闭环和只读边界见
 [`../architecture/v0.1-import-mirror-contract.md`](../contracts/v0.1-import-mirror-contract.md)。

@@ -186,6 +186,39 @@ export type ApprovalRecordsResponse = {
   approval_records: ApprovalRecord[];
 };
 
+export type TransitionPreview = {
+  id: number;
+  workflow_version_id: number;
+  from_stage: string;
+  to_stage: string;
+  status: string;
+  required_gate_name: string;
+  gate_result_id?: number;
+  blockers: string[];
+  warnings: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type TransitionPreviewsResponse = {
+  project: ProjectRecord;
+  workflow_version: WorkflowVersion;
+  transition_previews: TransitionPreview[];
+};
+
+export type AuthStatus = {
+  mode: "disabled" | "token";
+  requires_token: boolean;
+};
+
+export type AuthPrincipal = {
+  actor: string;
+  token_key: string;
+  projects: string[];
+  capabilities: string[];
+  scope_hash: string;
+};
+
 export type RunRecord = {
   id: number;
   project_id?: number;

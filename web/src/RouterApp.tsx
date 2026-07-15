@@ -1,10 +1,13 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { App as CompatibilityWorkspace } from "./App";
 import { AppShell } from "./components/AppShell";
+import { ProjectRoute } from "./components/ProjectRoute";
 import { ProjectProvider } from "./context/ProjectContext";
+import { AuthGate } from "./context/AuthContext";
 import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { OperationsPage } from "./pages/OperationsPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { RunsPage } from "./pages/RunsPage";
@@ -14,27 +17,29 @@ import { WorkflowsPage } from "./pages/WorkflowsPage";
 export function RouterApp() {
   return (
     <BrowserRouter>
-      <ProjectProvider>
-        <Routes>
+      <AuthGate>
+        <ProjectProvider>
+          <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<OverviewPage />} />
+            <Route index element={<ProjectRoute><OverviewPage /></ProjectRoute>} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectKey" element={<ProjectsPage />} />
-            <Route path="workflows" element={<WorkflowsPage />} />
-            <Route path="projects/:projectKey/workflows/:version" element={<WorkflowsPage />} />
-            <Route path="runs" element={<RunsPage />} />
-            <Route path="runs/:runId" element={<RunsPage />} />
-            <Route path="workers" element={<WorkersPage />} />
-            <Route path="workers/:workerKey" element={<WorkersPage />} />
-            <Route path="artifacts" element={<ArtifactsPage />} />
-            <Route path="artifacts/:artifactId" element={<ArtifactsPage />} />
-            <Route path="audit" element={<AuditPage />} />
-            <Route path="operations" element={<OperationsPage />} />
+            <Route path="workflows" element={<ProjectRoute><WorkflowsPage /></ProjectRoute>} />
+            <Route path="projects/:projectKey/workflows/:version" element={<ProjectRoute><WorkflowsPage /></ProjectRoute>} />
+            <Route path="runs" element={<ProjectRoute><RunsPage /></ProjectRoute>} />
+            <Route path="runs/:runId" element={<ProjectRoute><RunsPage /></ProjectRoute>} />
+            <Route path="workers" element={<ProjectRoute><WorkersPage /></ProjectRoute>} />
+            <Route path="workers/:workerKey" element={<ProjectRoute><WorkersPage /></ProjectRoute>} />
+            <Route path="artifacts" element={<ProjectRoute><ArtifactsPage /></ProjectRoute>} />
+            <Route path="artifacts/:artifactId" element={<ProjectRoute><ArtifactsPage /></ProjectRoute>} />
+            <Route path="audit" element={<ProjectRoute><AuditPage /></ProjectRoute>} />
+            <Route path="operations" element={<ProjectRoute><OperationsPage /></ProjectRoute>} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="operations/compatibility" element={<CompatibilityWorkspace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </ProjectProvider>
+          </Routes>
+        </ProjectProvider>
+      </AuthGate>
     </BrowserRouter>
   );
 }

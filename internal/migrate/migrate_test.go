@@ -12,8 +12,8 @@ func TestList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list migrations: %v", err)
 	}
-	if len(migrations) != 12 {
-		t.Fatalf("migration count = %d, want 12", len(migrations))
+	if len(migrations) != 14 {
+		t.Fatalf("migration count = %d, want 14", len(migrations))
 	}
 	if migrations[0].Name != "000001_v0_1_core.sql" {
 		t.Fatalf("migration name = %q", migrations[0].Name)
@@ -51,10 +51,35 @@ func TestList(t *testing.T) {
 	if migrations[11].Name != ReleaseExceptionMigrationName {
 		t.Fatalf("migration name = %q", migrations[11].Name)
 	}
+	if migrations[12].Name != ChecksumMigrationName {
+		t.Fatalf("migration name = %q", migrations[12].Name)
+	}
+	if migrations[13].Name != "000014_v1_project_history_attribution.sql" {
+		t.Fatalf("migration name = %q", migrations[13].Name)
+	}
 	for _, migration := range migrations {
 		if migration.SQL == "" {
 			t.Fatalf("migration %s SQL is empty", migration.Name)
 		}
+	}
+}
+
+func TestMigrationChecksumSchema(t *testing.T) {
+	migration, err := migrationByName(ChecksumMigrationName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{"ADD COLUMN IF NOT EXISTS sha256", "hash_algorithm", "hash_recorded_at", "^[0-9a-f]{64}$"} {
+		if !strings.Contains(migration.SQL, fragment) {
+			t.Fatalf("migration checksum schema missing %q", fragment)
+		}
+	}
+	digest, err := MigrationSetDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(digest) != 64 {
+		t.Fatalf("migration set digest length = %d", len(digest))
 	}
 }
 
