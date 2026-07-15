@@ -26,6 +26,10 @@ type fakeTokenAuthenticator struct {
 	rawToken  string
 }
 
+type fakeReadinessCheck struct{ err error }
+
+func (f fakeReadinessCheck) Ping(context.Context) error { return f.err }
+
 func (f *fakeTokenAuthenticator) Authenticate(_ context.Context, rawToken string) (auth.Principal, error) {
 	f.rawToken = rawToken
 	if f.err != nil {
@@ -101,8 +105,10 @@ type fakeProjectStore struct {
 	gate                          project.GateResult
 	gates                         []project.GateResult
 	preview                       project.WorkflowTransitionPreview
+	previewHook                   func(project.PreviewTransitionOptions)
 	previews                      []project.WorkflowTransitionPreview
 	approval                      project.ApprovalRecord
+	approvalHook                  func(project.CreateApprovalOptions)
 	approvals                     []project.ApprovalRecord
 	runner                        project.RunnerPreviewResult
 	workerPool                    project.WorkerPoolSummary
@@ -333,7 +339,10 @@ func (s fakeProjectStore) ListGateResults(context.Context, project.Record, proje
 	return s.gates, nil
 }
 
-func (s fakeProjectStore) PreviewWorkflowTransition(context.Context, project.Record, string, project.PreviewTransitionOptions) (project.WorkflowTransitionPreview, error) {
+func (s fakeProjectStore) PreviewWorkflowTransition(_ context.Context, _ project.Record, _ string, options project.PreviewTransitionOptions) (project.WorkflowTransitionPreview, error) {
+	if s.previewHook != nil {
+		s.previewHook(options)
+	}
 	if s.err != nil {
 		return project.WorkflowTransitionPreview{}, s.err
 	}
@@ -344,7 +353,10 @@ func (s fakeProjectStore) ListWorkflowTransitionPreviews(context.Context, projec
 	return s.previews, nil
 }
 
-func (s fakeProjectStore) CreateApprovalRecord(context.Context, project.Record, string, project.CreateApprovalOptions) (project.ApprovalRecord, error) {
+func (s fakeProjectStore) CreateApprovalRecord(_ context.Context, _ project.Record, _ string, options project.CreateApprovalOptions) (project.ApprovalRecord, error) {
+	if s.approvalHook != nil {
+		s.approvalHook(options)
+	}
 	if s.err != nil {
 		return project.ApprovalRecord{}, s.err
 	}
@@ -1261,6 +1273,47 @@ func TestReadinessEndpoint(t *testing.T) {
 	}
 }
 
+func TestReadinessEndpointFailsClosedForArtifactStore(t *testing.T) {
+	server := Server{store: fakeProjectStore{}, doctorRunner: runProjectDoctor, artifactReadiness: fakeReadinessCheck{err: errors.New("S3 unavailable")}}
+	resp := httptest.NewRecorder()
+	server.handler().ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil))
+	if resp.Code != http.StatusServiceUnavailable || !strings.Contains(resp.Body.String(), `"artifact_store":"unavailable"`) {
+		t.Fatalf("readiness status = %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestRequestTimeoutMiddlewareBoundsOrdinaryRequestsButNotSSE(t *testing.T) {
+	server := Server{requestTimeout: 10 * time.Millisecond}
+	ordinaryDeadline := make(chan bool, 1)
+	ordinary := server.requestTimeoutMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, ok := r.Context().Deadline()
+		ordinaryDeadline <- ok
+	}))
+	ordinary.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/projects", nil))
+	if !<-ordinaryDeadline {
+		t.Fatal("ordinary request must receive a deadline")
+	}
+
+	sseDeadline := make(chan bool, 1)
+	sse := server.requestTimeoutMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, ok := r.Context().Deadline()
+		sseDeadline <- ok
+	}))
+	sse.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/events/stream", nil))
+	if <-sseDeadline {
+		t.Fatal("SSE request must not receive the ordinary request timeout")
+	}
+}
+
+func TestValidateProductionProjectArtifacts(t *testing.T) {
+	if err := validateProductionProjectArtifacts(context.Background(), fakeProjectStore{records: []project.Record{{Key: "area", ArtifactBackend: "s3"}}}); err != nil {
+		t.Fatalf("S3 project rejected: %v", err)
+	}
+	if err := validateProductionProjectArtifacts(context.Background(), fakeProjectStore{records: []project.Record{{Key: "area", ArtifactBackend: "local"}}}); err == nil {
+		t.Fatal("production local artifact backend must be rejected")
+	}
+}
+
 func TestTokenAuthenticationMiddleware(t *testing.T) {
 	store := fakeProjectStore{records: []project.Record{{ID: 1, Key: "area"}, {ID: 2, Key: "other"}}}
 	principal := auth.Principal{
@@ -1325,10 +1378,10 @@ func TestTokenAuthenticationUsesPathProjectScope(t *testing.T) {
 	}
 }
 
-func TestTokenAuthenticationOnlyEnablesApprovalWrites(t *testing.T) {
+func TestTokenAuthenticationRequiresWriteCapability(t *testing.T) {
 	store := fakeProjectStore{records: []project.Record{{ID: 1, Key: "area"}}}
 	authenticator := &fakeTokenAuthenticator{principal: auth.Principal{
-		TokenKey: "token-key", Actor: "operator", Projects: []string{"area"}, Capabilities: []string{"*"},
+		TokenKey: "token-key", Actor: "approver", Projects: []string{"area"}, Capabilities: []string{"workflow.approval.record"},
 	}}
 	handler := NewHandlerWithAuth(store, nil, config.AuthConfig{Mode: "token"}, authenticator)
 
@@ -11157,6 +11210,70 @@ func splitAddr(addr string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+func TestTrustedProxyMiddlewareRejectsSpoofedForwardedHeaders(t *testing.T) {
+	server := Server{serverConfig: config.ServerConfig{TrustedProxyCIDRs: []string{"10.0.0.0/8"}}}
+	handler := server.securityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	request.RemoteAddr = "192.0.2.4:4567"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.Code)
+	}
+}
+
+func TestTrustedProxyMiddlewareAllowsConfiguredProxy(t *testing.T) {
+	server := Server{serverConfig: config.ServerConfig{TrustedProxyCIDRs: []string{"10.0.0.0/8"}}}
+	handler := server.securityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	request.RemoteAddr = "10.2.3.4:4567"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", response.Code)
+	}
+}
+
+func TestAuthenticatedApprovalUsesPrincipalActor(t *testing.T) {
+	record := project.Record{ID: 1, Key: "area"}
+	version := project.WorkflowVersion{ID: 2, DisplayLabel: "v1", ImportMode: "authored"}
+	var captured project.CreateApprovalOptions
+	store := fakeProjectStore{
+		record:       record,
+		version:      version,
+		approval:     project.ApprovalRecord{ID: 3, WorkflowVersionID: version.ID, Decision: "rejected"},
+		approvalHook: func(options project.CreateApprovalOptions) { captured = options },
+	}
+	authenticator := &fakeTokenAuthenticator{principal: auth.Principal{
+		Actor: "authenticated-approver", AuthMode: "token", TokenKey: "svc", Projects: []string{"area"},
+		Capabilities: []string{"workflow.approval.record"},
+	}}
+	handler := NewHandlerWithAuth(store, nil, config.AuthConfig{Mode: "token"}, authenticator)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/area/workflow-versions/v1/approvals", strings.NewReader(`{"decision":"rejected","actor":"spoofed","reason":"test"}`))
+	request.Header.Set("Authorization", "Bearer af_test")
+	request.Header.Set("Idempotency-Key", "approval-test")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	if captured.Actor != "authenticated-approver" {
+		t.Fatalf("actor = %q, want authenticated principal", captured.Actor)
+	}
 }
 
 func containsString(values []string, want string) bool {

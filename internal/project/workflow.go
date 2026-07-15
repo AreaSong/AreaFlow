@@ -1092,6 +1092,9 @@ func (s Store) CreateApprovalRecord(ctx context.Context, record Record, label st
 	if options.Decision == "approved" && (!found || preview.Status != "ready") {
 		return ApprovalRecord{}, fmt.Errorf("%w: create a ready transition preview before approving", ErrApprovalPreviewNotReady)
 	}
+	if options.Decision == "approved" && highRiskApproval(options.RiskLevel) && sameActor(options.Actor, preview.Metadata["actor"]) {
+		return ApprovalRecord{}, fmt.Errorf("high-risk approval requires an approver different from the transition requester")
+	}
 	approval := buildApprovalRecord(record, version, preview, found, options)
 	requestHash, err := approvalRecordRequestHash(record, version, approval)
 	if err != nil {
@@ -1379,6 +1382,20 @@ func normalizeCreateApprovalOptions(options CreateApprovalOptions) CreateApprova
 		options.Metadata = map[string]any{}
 	}
 	return options
+}
+
+func highRiskApproval(riskLevel string) bool {
+	switch strings.ToLower(strings.TrimSpace(riskLevel)) {
+	case "high", "critical", "l4":
+		return true
+	default:
+		return false
+	}
+}
+
+func sameActor(approver string, requester any) bool {
+	requesterName, ok := requester.(string)
+	return ok && requesterName != "" && strings.EqualFold(strings.TrimSpace(approver), strings.TrimSpace(requesterName))
 }
 
 func approvalRecordRequestHash(record Record, version WorkflowVersion, approval ApprovalRecord) (string, error) {
@@ -2602,12 +2619,9 @@ RETURNING id, project_id, workflow_version_id, stage, item_type, external_key,
 }
 
 func writeAndInsertStageArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, item WorkflowItem, spec stageSkeletonSpec, options EnsureStageSkeletonOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content := stageArtifactContent(record, version, spec, options)
 	relativePath := filepath.Join(version.DisplayLabel, spec.Stage, spec.FileName)
-	stored, err := writeLocalProjectArtifact(record, relativePath, []byte(content), contentTypeForArtifact(spec.FileName))
+	stored, err := writeProjectArtifact(record, relativePath, []byte(content), contentTypeForArtifact(spec.FileName))
 	if err != nil {
 		return ArtifactRecord{}, err
 	}
@@ -2625,9 +2639,6 @@ func writeAndInsertStageArtifact(ctx context.Context, tx pgx.Tx, record Record, 
 }
 
 func writeAndInsertReadyMarkerArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, item WorkflowItem, options MarkWorkflowItemReadyOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"kind":          "workflow_item_ready_marker",
 		"project":       record.Key,
@@ -2646,7 +2657,7 @@ func writeAndInsertReadyMarkerArtifact(ctx context.Context, tx pgx.Tx, record Re
 	content = append(content, '\n')
 	fileName := item.ItemType + "-ready.json"
 	relativePath := filepath.Join(version.DisplayLabel, item.Stage, fileName)
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}

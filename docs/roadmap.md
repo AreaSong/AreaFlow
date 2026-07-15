@@ -31,11 +31,11 @@ Roadmap 只记录尚未成为当前产品事实的方向。已完成的阶段、
 
 以下能力需要独立 proposal、安全设计和开闸验证：
 
-- users、teams 和角色授权。
-- API tokens 和 external webhooks。
+- team lifecycle、membership invitation 和 OIDC group/team 自动映射。
+- external webhooks 与 callback credential。
 - secret resolve 和 credential lifecycle。
 - remote workers 和通用 AI engine execution。
 - 第三方 plugin execution 与 marketplace。
 - budget、quota、usage metering 和 managed operations。
 
-这些方向在实现、测试和验证完成前，不进入当前功能说明。
+OIDC users、project role bindings、Web session 和 scoped service tokens 已进入当前架构、API 与配置文档，不再属于 roadmap。上述剩余方向在实现、测试和验证完成前，不进入当前功能说明。

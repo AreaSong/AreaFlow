@@ -205,7 +205,7 @@ func (s Store) backupProjectManifest(ctx context.Context, record Record) (Backup
 
 func (s Store) backupProjectRecords(ctx context.Context) ([]Record, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, p.default_branch,
+SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, COALESCE(p.default_branch, ''),
        COALESCE(c.root_path, ''), COALESCE(a.remote_url, ''), COALESCE(a.root_path, '')
 FROM projects p
 LEFT JOIN LATERAL (

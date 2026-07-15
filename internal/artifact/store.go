@@ -1,9 +1,9 @@
 package artifact
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,29 +18,17 @@ type Stored struct {
 }
 
 func WriteLocal(root string, relativePath string, content []byte, contentType string) (Stored, error) {
-	root = expandHome(strings.TrimSpace(root))
-	if root == "" {
-		return Stored{}, fmt.Errorf("artifact store root is required")
-	}
-	cleanRelative := filepath.Clean(relativePath)
-	if cleanRelative == "." || strings.HasPrefix(cleanRelative, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanRelative) {
-		return Stored{}, fmt.Errorf("artifact path must stay under artifact store root")
-	}
-	target := filepath.Join(root, cleanRelative)
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return Stored{}, fmt.Errorf("create artifact directory: %w", err)
-	}
-	if err := os.WriteFile(target, content, 0o644); err != nil {
-		return Stored{}, fmt.Errorf("write artifact: %w", err)
-	}
+	return NewLocalBackend(root).Put(context.Background(), relativePath, content, contentType)
+}
+
+func stored(backend, uri string, content []byte, contentType string) Stored {
 	sum := sha256.Sum256(content)
-	return Stored{
-		Backend:     "local",
-		URI:         target,
-		SHA256:      hex.EncodeToString(sum[:]),
-		SizeBytes:   int64(len(content)),
-		ContentType: contentType,
-	}, nil
+	return Stored{Backend: backend, URI: uri, SHA256: hex.EncodeToString(sum[:]), SizeBytes: int64(len(content)), ContentType: contentType}
+}
+
+func sha256Bytes(content []byte) []byte {
+	sum := sha256.Sum256(content)
+	return sum[:]
 }
 
 func expandHome(path string) string {

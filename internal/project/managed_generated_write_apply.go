@@ -865,9 +865,6 @@ RETURNING id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_it
 }
 
 func writeAndInsertManagedGeneratedWriteSetArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, task RunTaskRecord, options ManagedGeneratedWriteQueueOptions) (ArtifactRecord, string, int64, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, "", 0, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	afterSHA, afterSize := hashBytes([]byte(options.Content))
 	writeSet := managedGeneratedWriteSet{
 		Operation:                 "modify",
@@ -891,7 +888,7 @@ func writeAndInsertManagedGeneratedWriteSetArtifact(ctx context.Context, tx pgx.
 		return ArtifactRecord{}, "", 0, fmt.Errorf("marshal managed generated write-set: %w", err)
 	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "managed-generated-write", fmt.Sprintf("run-%d-task-%d-write-set.json", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, "", 0, err
 	}
@@ -983,20 +980,11 @@ func loadManagedGeneratedWriteSet(ctx context.Context, tx pgx.Tx, record Record,
 	if err != nil {
 		return managedGeneratedWriteSet{}, ArtifactRecord{}, err
 	}
-	if artifact.StorageBackend != "local" {
-		return managedGeneratedWriteSet{}, ArtifactRecord{}, fmt.Errorf("write-set artifact must be local")
-	}
-	content, err := os.ReadFile(artifact.URI)
+	artifactContent, err := ReadArtifactContent(artifact)
 	if err != nil {
 		return managedGeneratedWriteSet{}, ArtifactRecord{}, fmt.Errorf("read managed generated write-set artifact: %w", err)
 	}
-	sha, size := hashBytes(content)
-	if artifact.SHA256 != "" && sha != artifact.SHA256 {
-		return managedGeneratedWriteSet{}, ArtifactRecord{}, fmt.Errorf("write-set artifact hash mismatch")
-	}
-	if artifact.SizeBytes > 0 && size != artifact.SizeBytes {
-		return managedGeneratedWriteSet{}, ArtifactRecord{}, fmt.Errorf("write-set artifact size mismatch")
-	}
+	content := artifactContent.Content
 	var writeSet managedGeneratedWriteSet
 	if err := json.Unmarshal(content, &writeSet); err != nil {
 		return managedGeneratedWriteSet{}, ArtifactRecord{}, fmt.Errorf("parse managed generated write-set artifact: %w", err)
@@ -1014,11 +1002,8 @@ func loadManagedGeneratedWriteSet(ctx context.Context, tx pgx.Tx, record Record,
 }
 
 func writeAndInsertManagedGeneratedPreimageArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, task RunTaskRecord, targetPath string, preimage fixtureProjectFileImage, options ManagedGeneratedWriteOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "managed-generated-write", fmt.Sprintf("run-%d-task-%d-preimage.bin", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, preimage.Content, "application/octet-stream")
+	stored, err := writeProjectArtifact(record, relativePath, preimage.Content, "application/octet-stream")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}
@@ -1093,9 +1078,6 @@ RETURNING id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_it
 }
 
 func writeAndInsertManagedGeneratedWriteReport(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, worker WorkerRecord, task RunTaskRecord, lease LeaseRecord, gate ExecutionApprovalGate, writeSetArtifact ArtifactRecord, preimageArtifact ArtifactRecord, copyAttempt RunAttemptRecord, verifyAttempt RunAttemptRecord, rollbackAttempt RunAttemptRecord, writeSet managedGeneratedWriteSet, preimage fixtureProjectFileImage, afterImage fixtureProjectFileImage, restoredImage fixtureProjectFileImage, options ManagedGeneratedWriteOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"project":                           record.Key,
 		"workflow_version":                  version.DisplayLabel,
@@ -1150,7 +1132,7 @@ func writeAndInsertManagedGeneratedWriteReport(ctx context.Context, tx pgx.Tx, r
 		return ArtifactRecord{}, fmt.Errorf("marshal managed generated write report: %w", err)
 	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "managed-generated-write", fmt.Sprintf("run-%d-task-%d-report.json", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}

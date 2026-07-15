@@ -10,6 +10,7 @@ import {
   Workflow,
   RefreshCw,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useProject } from "../context/ProjectContext";
@@ -23,13 +24,16 @@ const navigation = [
   { to: "/workers", label: "Workers", icon: Network },
   { to: "/artifacts", label: "Artifacts", icon: FileArchive },
   { to: "/audit", label: "Audit", icon: History },
+  { to: "/access", label: "Access", icon: ShieldCheck, capability: "auth.role.manage" },
   { to: "/operations", label: "Operations", icon: ServerCog },
 ];
 
 export function AppShell() {
   const { projects, selectedProjectKey, setSelectedProjectKey, loading, error, retryProjects } = useProject();
-  const { status, principal, signOut } = useAuth();
-  const visibleNavigation = navigation.filter((item) => item.to !== "/operations" || principal.projects.includes("*"));
+  const { status, principal, signOut, allowsCapability } = useAuth();
+  const visibleNavigation = navigation.filter((item) =>
+    (item.to !== "/operations" || principal.projects.includes("*")) && (!item.capability || allowsCapability(item.capability)),
+  );
 
   return (
     <div className="app-shell">
@@ -60,7 +64,7 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="auth-summary"><div><strong>{principal.actor}</strong><small>{status.mode === "token" ? principal.token_key : "local mode"}</small></div>{status.requires_token ? <button type="button" onClick={signOut} aria-label="退出登录" title="退出登录"><LogOut size={16} /></button> : null}</div>
+        <div className="auth-summary"><div><strong>{principal.actor}</strong><small>{status.mode === "token" ? principal.token_key : status.mode === "oidc" ? principal.roles.join(", ") || "no role" : "local mode"}</small></div>{status.mode !== "disabled" ? <button type="button" onClick={() => void signOut()} aria-label="退出登录" title="退出登录"><LogOut size={16} /></button> : null}</div>
       </aside>
       <main className="app-main"><Outlet /></main>
     </div>

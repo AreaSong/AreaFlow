@@ -47,6 +47,8 @@ api_bin="${tmp_dir}/areaflow"
 status_path="${project_root}/.areaflow/status.json"
 workflow_readme="${project_root}/workflow/README.md"
 real_readonly_counts_before=""
+base_database_url="${AREAFLOW_DATABASE_URL}"
+smoke_schema=""
 
 protected_paths=(
   "workflow/README.md"
@@ -73,9 +75,22 @@ cleanup() {
     kill "${api_pid}" >/dev/null 2>&1 || true
     wait "${api_pid}" >/dev/null 2>&1 || true
   fi
+  if [[ -n "${smoke_schema}" ]]; then
+    psql "${base_database_url}" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS ${smoke_schema} CASCADE" >/dev/null 2>&1 || true
+  fi
   rm -rf "${tmp_dir}"
 }
 trap cleanup EXIT
+
+if [[ "${smoke_mode}" == "fixture" ]]; then
+  smoke_schema="areaflow_web_smoke_$$_${RANDOM}"
+  psql "${base_database_url}" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA ${smoke_schema}" >/dev/null
+  if [[ "${base_database_url}" == *\?* ]]; then
+    export AREAFLOW_DATABASE_URL="${base_database_url}&options=-csearch_path%3D${smoke_schema}"
+  else
+    export AREAFLOW_DATABASE_URL="${base_database_url}?options=-csearch_path%3D${smoke_schema}"
+  fi
+fi
 
 create_fixture() {
   mkdir -p \

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrInvalidToken = errors.New("invalid API token")
@@ -23,11 +22,16 @@ var ErrInvalidToken = errors.New("invalid API token")
 type Principal struct {
 	TokenID      int64
 	TokenKey     string
+	UserID       int64
+	SessionID    int64
 	ActorID      int64
 	Actor        string
+	AuthMode     string
+	Roles        []string
 	Projects     []string
 	Capabilities []string
 	ScopeHash    string
+	CSRFHash     string
 }
 
 func (p Principal) AllowsProject(projectKey string) bool {
@@ -56,6 +60,8 @@ type CreateTokenOptions struct {
 	Projects     []string
 	Capabilities []string
 	ExpiresAt    *time.Time
+	CreatedBy    string
+	RotatedFrom  int64
 }
 
 type CreatedToken struct {
@@ -63,19 +69,12 @@ type CreatedToken struct {
 	Record TokenRecord
 }
 
-type Service struct {
-	pool *pgxpool.Pool
-}
-
-func NewService(pool *pgxpool.Pool) Service {
-	return Service{pool: pool}
-}
-
 func (s Service) CreateToken(ctx context.Context, options CreateTokenOptions) (CreatedToken, error) {
 	options.Actor = strings.TrimSpace(options.Actor)
 	options.Reason = strings.TrimSpace(options.Reason)
 	options.Projects = normalize(options.Projects)
 	options.Capabilities = normalize(options.Capabilities)
+	options.CreatedBy = strings.TrimSpace(options.CreatedBy)
 	if options.Actor == "" || options.Reason == "" {
 		return CreatedToken{}, fmt.Errorf("actor and reason are required")
 	}
@@ -103,19 +102,39 @@ func (s Service) CreateToken(ctx context.Context, options CreateTokenOptions) (C
 		return CreatedToken{}, err
 	}
 	record := TokenRecord{TokenKey: tokenKey, Actor: options.Actor, Projects: options.Projects, Capabilities: options.Capabilities, Status: "active", ExpiresAt: options.ExpiresAt}
+	createdByActorID := actorID
+	if options.CreatedBy != "" {
+		createdByActorID, err = ensureActor(ctx, tx, options.CreatedBy)
+		if err != nil {
+			return CreatedToken{}, err
+		}
+	}
+	if options.ExpiresAt == nil {
+		return CreatedToken{}, fmt.Errorf("service token expiration is required")
+	}
+	if s.tokenMaxTTL <= 0 || s.tokenMaxTTL > 90*24*time.Hour {
+		return CreatedToken{}, fmt.Errorf("service token max TTL must be between 1ns and 2160h")
+	}
+	if !options.ExpiresAt.After(time.Now().UTC()) || options.ExpiresAt.After(time.Now().UTC().Add(s.tokenMaxTTL)) {
+		return CreatedToken{}, fmt.Errorf("service token expiration must be in the future and no more than %s", s.tokenMaxTTL)
+	}
 	err = tx.QueryRow(ctx, `
-INSERT INTO api_tokens (actor_id, token_key, token_hash, scope, status, expires_at)
-VALUES ($1, $2, $3, $4::jsonb, 'active', $5)
-RETURNING id, created_at`, actorID, tokenKey, tokenHash(rawToken), string(scopeJSON), options.ExpiresAt).Scan(&record.ID, &record.CreatedAt)
+INSERT INTO api_tokens (
+    actor_id, token_key, token_hash, scope, status, expires_at,
+    token_type, created_by_actor_id, rotated_from_token_id, reason
+)
+VALUES ($1, $2, $3, $4::jsonb, 'active', $5, 'service', $6, NULLIF($7, 0), $8)
+	RETURNING id, created_at`, actorID, tokenKey, tokenHash(rawToken), string(scopeJSON), options.ExpiresAt, createdByActorID, options.RotatedFrom, options.Reason).Scan(&record.ID, &record.CreatedAt)
 	if err != nil {
 		return CreatedToken{}, fmt.Errorf("insert API token: %w", err)
 	}
 	auditMetadata, _ := json.Marshal(map[string]any{
 		"token_key": tokenKey, "scope_hash": scopeHash(scopeJSON), "projects": options.Projects, "capabilities": options.Capabilities,
+		"expires_at": options.ExpiresAt, "rotated_from_token_id": options.RotatedFrom,
 	})
 	if _, err := tx.Exec(ctx, `
 INSERT INTO audit_events (actor_id, action, capability, resource_type, resource, decision, reason, metadata)
-VALUES ($1, 'auth.token.create', 'manage_tokens', 'api_token', $2, 'allowed', $3, $4::jsonb)`, actorID, tokenKey, options.Reason, string(auditMetadata)); err != nil {
+VALUES ($1, 'auth.token.create', 'auth.token.manage', 'api_token', $2, 'allowed', $3, $4::jsonb)`, createdByActorID, tokenKey, options.Reason, string(auditMetadata)); err != nil {
 		return CreatedToken{}, fmt.Errorf("audit API token creation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -156,6 +175,7 @@ WHERE t.token_key = $1`, tokenKey).Scan(
 	}
 	principal.Projects = normalize(scope.Projects)
 	principal.Capabilities = normalize(scope.Capabilities)
+	principal.AuthMode = "token"
 	principal.ScopeHash = scopeHash(scopeRaw)
 	if len(principal.Projects) == 0 || len(principal.Capabilities) == 0 {
 		return Principal{}, ErrInvalidToken
@@ -217,7 +237,7 @@ func (s Service) RevokeToken(ctx context.Context, tokenKey string, actor string,
 	}
 	if _, err := tx.Exec(ctx, `
 INSERT INTO audit_events (actor_id, action, capability, resource_type, resource, decision, reason, metadata)
-VALUES ($1, 'auth.token.revoke', 'manage_tokens', 'api_token', $2, 'allowed', $3, '{}'::jsonb)`, actorID, tokenKey, reason); err != nil {
+VALUES ($1, 'auth.token.revoke', 'auth.token.manage', 'api_token', $2, 'allowed', $3, '{}'::jsonb)`, actorID, tokenKey, reason); err != nil {
 		return fmt.Errorf("audit API token revocation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

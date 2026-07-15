@@ -14,11 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/areasong/areaflow/internal/artifact"
 	"github.com/areasong/areaflow/internal/auth"
 	"github.com/areasong/areaflow/internal/config"
 	"github.com/areasong/areaflow/internal/db"
 	"github.com/areasong/areaflow/internal/doctor"
 	"github.com/areasong/areaflow/internal/importer"
+	"github.com/areasong/areaflow/internal/observability"
 	"github.com/areasong/areaflow/internal/project"
 	statusmirror "github.com/areasong/areaflow/internal/status"
 )
@@ -36,6 +38,14 @@ type readinessResponse struct {
 
 type ReadinessStore interface {
 	Ping(ctx context.Context) error
+}
+
+type ReadinessCheck interface {
+	Ping(ctx context.Context) error
+}
+
+type ReadinessObserver interface {
+	ObserveDependency(name string, ready bool)
 }
 
 type ProjectStore interface {
@@ -183,11 +193,18 @@ type TokenAuthenticator interface {
 }
 
 type Server struct {
-	store         ProjectStore
-	doctorRunner  ProjectDoctorRunner
-	importer      ProjectImporter
-	authConfig    config.AuthConfig
-	authenticator TokenAuthenticator
+	store                ProjectStore
+	doctorRunner         ProjectDoctorRunner
+	importer             ProjectImporter
+	serverConfig         config.ServerConfig
+	authConfig           config.AuthConfig
+	authenticator        TokenAuthenticator
+	sessionAuthenticator SessionAuthenticator
+	oidcProvider         OIDCProvider
+	artifactReadiness    ReadinessCheck
+	readinessObserver    ReadinessObserver
+	requestTimeout       time.Duration
+	loginLimiter         *ipRateLimiter
 }
 
 type requestPrincipalKey struct{}
@@ -3789,29 +3806,81 @@ type projectPhaseGateResponse struct {
 
 // Serve starts the local AreaFlow API service.
 func Serve(ctx context.Context, cfg config.ServerConfig) error {
-	if err := cfg.Validate(); err != nil {
-		return err
-	}
 	appCfg := config.FromEnv()
-	if err := appCfg.Auth.Validate(); err != nil {
+	appCfg.Server = cfg
+	if err := appCfg.Validate(); err != nil {
 		return err
 	}
-	pool, err := db.Open(ctx, appCfg.Database)
+	observability.ConfigureJSONLogging()
+	shutdownTracing, err := observability.InitTracing(ctx, appCfg.Observability)
+	if err != nil {
+		return err
+	}
+	defer shutdownTracing(context.Background())
+	metrics := observability.NewMetrics()
+	if err := observability.StartMetricsServer(ctx, appCfg.Observability, metrics); err != nil {
+		return err
+	}
+	pool, err := db.OpenObserved(ctx, appCfg.Database, metrics)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
+	metrics.AttachDatabase(pool)
 
 	slog.Info("AreaFlow API starting", "addr", cfg.Addr())
 	store := project.NewStore(pool)
-	authService := auth.NewService(pool)
-	err = ServeHandler(ctx, cfg, NewHandlerWithAuth(store, func(ctx context.Context, record project.Record, options importer.Options) (importer.Result, error) {
+	if appCfg.Environment == "production" {
+		if err := validateProductionProjectArtifacts(ctx, store); err != nil {
+			return err
+		}
+	}
+	authService := auth.NewService(pool).WithTokenMaxTTL(appCfg.Auth.TokenMaxTTL)
+	var oidcProvider OIDCProvider
+	if appCfg.Auth.OIDCEnabled() {
+		manager, managerErr := auth.NewOIDCManager(ctx, appCfg.Auth.OIDCIssuerURL, appCfg.Auth.OIDCClientID,
+			appCfg.Auth.OIDCClientSecretFile, appCfg.Auth.OIDCRedirectURL, appCfg.Auth.OIDCGroupsClaim, appCfg.Auth.SessionSecretFile)
+		if managerErr != nil {
+			return managerErr
+		}
+		oidcProvider = manager
+	}
+	var artifactReadiness ReadinessCheck
+	if strings.EqualFold(appCfg.Artifact.Backend, "s3") || strings.EqualFold(appCfg.Artifact.Backend, "object") {
+		s3Backend, backendErr := artifact.DefaultS3Backend(ctx)
+		err = backendErr
+		if err != nil {
+			return err
+		}
+		artifactReadiness = s3Backend.WithObserver(metrics)
+	} else {
+		artifactReadiness = artifact.NewLocalBackend(appCfg.Artifact.LocalRoot)
+	}
+	handler := NewHandlerWithProductionDependencies(store, func(ctx context.Context, record project.Record, options importer.Options) (importer.Result, error) {
 		return importer.ImportProject(ctx, pool, record, options)
-	}, appCfg.Auth, authService))
+	}, appCfg.Server, appCfg.Auth, authService, oidcProvider, artifactReadiness, metrics, appCfg.Database.AcquireTimeout)
+	handler = observability.RequestMiddleware(observability.TraceHTTP(metrics.Middleware(handler)))
+	err = ServeHandler(ctx, cfg, handler)
 	if errors.Is(err, context.Canceled) {
 		slog.Info("AreaFlow API stopped", "reason", "context canceled")
 	}
 	return err
+}
+
+func validateProductionProjectArtifacts(ctx context.Context, store interface {
+	List(context.Context) ([]project.Record, error)
+}) error {
+	records, err := store.List(ctx)
+	if err != nil {
+		return fmt.Errorf("validate production project artifact stores: %w", err)
+	}
+	for _, record := range records {
+		backend := strings.ToLower(strings.TrimSpace(record.ArtifactBackend))
+		if backend != "s3" && backend != "object" {
+			return fmt.Errorf("production project %q must use an S3 artifact backend", record.Key)
+		}
+	}
+	return nil
 }
 
 func ServeHandler(ctx context.Context, cfg config.ServerConfig, handler http.Handler) error {
@@ -3871,15 +3940,41 @@ func NewHandlerWithAuth(store ProjectStore, importer ProjectImporter, authConfig
 		authConfig:    authConfig,
 		authenticator: authenticator,
 	}
+	if sessionAuthenticator, ok := authenticator.(SessionAuthenticator); ok {
+		server.sessionAuthenticator = sessionAuthenticator
+	}
+	return server.handler()
+}
+
+func NewHandlerWithProductionAuth(store ProjectStore, importer ProjectImporter, serverConfig config.ServerConfig, authConfig config.AuthConfig, service SessionAuthenticator, provider OIDCProvider) http.Handler {
+	return NewHandlerWithProductionDependencies(store, importer, serverConfig, authConfig, service, provider, nil, nil, 0)
+}
+
+func NewHandlerWithProductionDependencies(store ProjectStore, importer ProjectImporter, serverConfig config.ServerConfig, authConfig config.AuthConfig, service SessionAuthenticator, provider OIDCProvider, artifactReadiness ReadinessCheck, readinessObserver ReadinessObserver, requestTimeout time.Duration) http.Handler {
+	server := Server{
+		store: store, doctorRunner: runProjectDoctor, importer: importer, serverConfig: serverConfig, authConfig: authConfig,
+		sessionAuthenticator: service, oidcProvider: provider, artifactReadiness: artifactReadiness, readinessObserver: readinessObserver,
+		requestTimeout: requestTimeout,
+	}
+	if tokenAuthenticator, ok := service.(TokenAuthenticator); ok {
+		server.authenticator = tokenAuthenticator
+	}
 	return server.handler()
 }
 
 func (server Server) handler() http.Handler {
+	if server.loginLimiter == nil {
+		server.loginLimiter = newIPRateLimiter(30, time.Minute)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", healthHandler)
 	mux.HandleFunc("/api/ready", server.readinessHandler)
 	mux.HandleFunc("/api/auth/status", server.authStatusHandler)
 	mux.HandleFunc("/api/auth/me", server.authMeHandler)
+	mux.HandleFunc("/api/auth/oidc/login", server.oidcLoginHandler)
+	mux.HandleFunc("/api/auth/oidc/callback", server.oidcCallbackHandler)
+	mux.HandleFunc("/api/auth/logout", server.logoutHandler)
+	mux.HandleFunc("/api/auth/tokens", server.tokensHandler)
 	mux.HandleFunc("/api/service/status", server.localServiceStatusHandler)
 	mux.HandleFunc("/api/backup/manifest", server.backupManifestHandler)
 	mux.HandleFunc("/api/backup/restore-plan", server.restorePlanHandler)
@@ -3926,7 +4021,19 @@ func (server Server) handler() http.Handler {
 	mux.HandleFunc("/api/workers/", server.workerDetailHandler)
 	mux.HandleFunc("/api/artifacts", server.artifactCollectionHandler)
 	mux.HandleFunc("/api/artifacts/", server.artifactsHandler)
-	return apiVersionAlias(server.authMiddleware(mux))
+	return apiVersionAlias(server.securityMiddleware(server.authMiddleware(server.requestTimeoutMiddleware(mux))))
+}
+
+func (s Server) requestTimeoutMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.requestTimeout <= 0 || strings.Contains(r.URL.Path, "/events/stream") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), s.requestTimeout)
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (s Server) authMiddleware(next http.Handler) http.Handler {
@@ -3940,18 +4047,44 @@ func (s Server) authMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestPrincipalKey{}, principal)))
 			return
 		}
-		if s.authenticator == nil {
-			writeError(w, http.StatusServiceUnavailable, "token authentication is unavailable")
-			return
-		}
-		rawToken, ok := bearerToken(r.Header.Get("Authorization"))
-		if !ok {
+		var principal auth.Principal
+		rawToken, hasBearer := bearerToken(r.Header.Get("Authorization"))
+		if hasBearer {
+			if s.authenticator == nil {
+				writeError(w, http.StatusServiceUnavailable, "token authentication is unavailable")
+				return
+			}
+			var err error
+			principal, err = s.authenticator.Authenticate(r.Context(), rawToken)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "invalid bearer token")
+				return
+			}
+		} else if s.authConfig.OIDCEnabled() {
+			if s.sessionAuthenticator == nil {
+				writeError(w, http.StatusServiceUnavailable, "session authentication is unavailable")
+				return
+			}
+			cookie, err := r.Cookie(s.authConfig.SessionCookieName)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "web session is required")
+				return
+			}
+			principal, err = s.sessionAuthenticator.AuthenticateSession(r.Context(), cookie.Value)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "invalid web session")
+				return
+			}
+			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+				csrfCookie, cookieErr := r.Cookie(csrfCookieName)
+				csrfHeader := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+				if cookieErr != nil || csrfHeader == "" || csrfHeader != csrfCookie.Value || !s.sessionAuthenticator.ValidateCSRF(principal, csrfHeader) {
+					writeError(w, http.StatusForbidden, "CSRF validation failed")
+					return
+				}
+			}
+		} else {
 			writeError(w, http.StatusUnauthorized, "bearer token is required")
-			return
-		}
-		principal, err := s.authenticator.Authenticate(r.Context(), rawToken)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "invalid bearer token")
 			return
 		}
 		requiredCapability := requestCapability(r)
@@ -3959,16 +4092,12 @@ func (s Server) authMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, "capability is not allowed")
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && requiredCapability != "workflow.approval.record" {
-			writeError(w, http.StatusForbidden, "write action is not enabled for token authentication")
-			return
-		}
 		projectKey := requestProjectKey(r)
 		if projectKey != "" && !principal.AllowsProject(projectKey) {
 			writeError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		if projectKey == "" && r.URL.Path != "/api/projects" && r.URL.Path != "/api/auth/me" && !principal.AllowsProject("*") {
+		if projectKey == "" && r.URL.Path != "/api/projects" && r.URL.Path != "/api/auth/me" && r.URL.Path != "/api/auth/logout" && !principal.AllowsProject("*") {
 			writeError(w, http.StatusForbidden, "global resource access is not allowed")
 			return
 		}
@@ -3977,7 +4106,8 @@ func (s Server) authMiddleware(next http.Handler) http.Handler {
 }
 
 func isPublicAuthPath(path string) bool {
-	return path == "/api/health" || path == "/api/ready" || path == "/api/auth/status"
+	return path == "/api/health" || path == "/api/ready" || path == "/api/auth/status" ||
+		path == "/api/auth/oidc/login" || path == "/api/auth/oidc/callback"
 }
 
 func bearerToken(header string) (string, bool) {
@@ -3990,6 +4120,15 @@ func bearerToken(header string) (string, bool) {
 }
 
 func requestCapability(r *http.Request) string {
+	if strings.HasSuffix(r.URL.Path, "/role-bindings") {
+		return "auth.role.manage"
+	}
+	if r.URL.Path == "/api/auth/tokens" {
+		return "auth.token.manage"
+	}
+	if r.URL.Path == "/api/auth/logout" {
+		return "read"
+	}
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return "read"
 	}
@@ -4019,10 +4158,15 @@ func (s Server) authStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mode := "disabled"
-	if s.authConfig.Enabled() {
+	if s.authConfig.OIDCEnabled() {
+		mode = "oidc"
+	} else if s.authConfig.Enabled() {
 		mode = "token"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"mode": mode, "requires_token": s.authConfig.Enabled()})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mode": mode, "requires_token": mode == "token", "requires_login": mode == "oidc",
+		"login_url": "/api/v1/auth/oidc/login",
+	})
 }
 
 func (s Server) authMeHandler(w http.ResponseWriter, r *http.Request) {
@@ -4034,6 +4178,7 @@ func (s Server) authMeHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"actor": principal.Actor, "token_key": principal.TokenKey, "projects": principal.Projects,
 		"capabilities": principal.Capabilities, "scope_hash": principal.ScopeHash,
+		"auth_mode": principal.AuthMode, "roles": principal.Roles, "user_id": principal.UserID,
 	})
 }
 
@@ -4048,6 +4193,11 @@ func apiVersionAlias(next http.Handler) http.Handler {
 			rewritten := cloneRequestWithPath(r, "/api/"+strings.TrimPrefix(r.URL.Path, "/api/v1/"))
 			next.ServeHTTP(w, rewritten)
 			return
+		}
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Deprecation", "true")
+			w.Header().Set("Link", "</api/v1>; rel=\"successor-version\"")
+			w.Header().Set("Warning", `299 - "Deprecated API alias; use /api/v1"`)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -4084,24 +4234,56 @@ func (s Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	checks := map[string]string{}
+	ready := true
 	store, ok := s.store.(ReadinessStore)
 	if !ok {
-		writeJSON(w, http.StatusServiceUnavailable, readinessResponse{
-			Status: "unavailable", Service: "areaflow", Checks: map[string]string{"database": "check unavailable"},
-		})
-		return
+		checks["database"] = "check unavailable"
+		ready = false
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if err := store.Ping(ctx); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, readinessResponse{
-			Status: "unavailable", Service: "areaflow", Checks: map[string]string{"database": "unavailable"},
-		})
-		return
+	if ok {
+		if err := store.Ping(ctx); err != nil {
+			checks["database"] = "unavailable"
+			ready = false
+		} else {
+			checks["database"] = "ready"
+		}
+		if s.readinessObserver != nil {
+			s.readinessObserver.ObserveDependency("database", checks["database"] == "ready")
+		}
 	}
-	writeJSON(w, http.StatusOK, readinessResponse{
-		Status: "ready", Service: "areaflow", Checks: map[string]string{"database": "ready"},
-	})
+	if s.artifactReadiness != nil {
+		if err := s.artifactReadiness.Ping(ctx); err != nil {
+			checks["artifact_store"] = "unavailable"
+			ready = false
+		} else {
+			checks["artifact_store"] = "ready"
+		}
+		if s.readinessObserver != nil {
+			s.readinessObserver.ObserveDependency("artifact_store", checks["artifact_store"] == "ready")
+		}
+	} else {
+		checks["artifact_store"] = "not_configured"
+	}
+	if s.authConfig.OIDCEnabled() {
+		if s.oidcProvider == nil {
+			checks["oidc"] = "unavailable"
+			ready = false
+		} else {
+			checks["oidc"] = "ready"
+		}
+	} else {
+		checks["oidc"] = "disabled"
+	}
+	statusCode := http.StatusOK
+	status := "ready"
+	if !ready {
+		statusCode = http.StatusServiceUnavailable
+		status = "unavailable"
+	}
+	writeJSON(w, statusCode, readinessResponse{Status: status, Service: "areaflow", Checks: checks})
 }
 
 func runProjectDoctor(ctx context.Context, record project.Record, store ProjectStore, allowNative bool) (doctor.Report, error) {
@@ -4125,7 +4307,7 @@ func (s Server) localServiceStatusHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	status, err := s.store.LocalServiceStatus(r.Context(), project.LocalServiceStatusOptions{
-		APIBaseURL:      requestAPIBaseURL(r),
+		APIBaseURL:      s.requestAPIBaseURL(r),
 		WebDashboardURL: r.URL.Query().Get("web_url"),
 	})
 	if err != nil {
@@ -4230,7 +4412,7 @@ func (s Server) completionAuditHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit, err := s.store.CompletionAudit(r.Context(), project.CompletionAuditOptions{
-		APIBaseURL:      requestAPIBaseURL(r),
+		APIBaseURL:      s.requestAPIBaseURL(r),
 		WebDashboardURL: r.URL.Query().Get("web_url"),
 	})
 	if err != nil {
@@ -4276,7 +4458,7 @@ func (s Server) operationsReadinessHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	readiness, err := s.store.OperationsReadiness(r.Context(), project.OperationsReadinessOptions{
-		APIBaseURL:      requestAPIBaseURL(r),
+		APIBaseURL:      s.requestAPIBaseURL(r),
 		WebDashboardURL: r.URL.Query().Get("web_url"),
 	})
 	if err != nil {
@@ -5129,7 +5311,10 @@ func (s Server) collectionProjectRecords(w http.ResponseWriter, r *http.Request)
 	return records, true
 }
 
-func requestAPIBaseURL(r *http.Request) string {
+func (s Server) requestAPIBaseURL(r *http.Request) string {
+	if publicBaseURL := strings.TrimRight(strings.TrimSpace(s.serverConfig.PublicBaseURL), "/"); publicBaseURL != "" {
+		return publicBaseURL + "/api/v1"
+	}
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
@@ -5168,6 +5353,12 @@ func (s Server) projectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch parts[1] {
+	case "role-bindings":
+		if len(parts) != 2 {
+			writeError(w, http.StatusNotFound, "role binding endpoint not found")
+			return
+		}
+		s.roleBindingsHandler(w, r, parts[0])
 	case "events":
 		if len(parts) == 3 && parts[2] == "stream" && r.Method == http.MethodGet {
 			s.projectEventStreamHandler(w, r, parts[0])
@@ -7827,10 +8018,14 @@ func (s Server) projectWorkflowVersionTransitionPreviewsHandler(w http.ResponseW
 			writeError(w, http.StatusBadRequest, "invalid transition preview request")
 			return
 		}
+		actor := request.Actor
+		if principal := principalFromContext(r.Context()); principal.AuthMode != "" {
+			actor = principal.Actor
+		}
 		preview, err := s.store.PreviewWorkflowTransition(r.Context(), record, label, project.PreviewTransitionOptions{
 			FromStage: request.FromStage,
 			ToStage:   request.ToStage,
-			Actor:     request.Actor,
+			Actor:     actor,
 			Reason:    request.Reason,
 		})
 		if err != nil {
@@ -7875,8 +8070,10 @@ func (s Server) projectWorkflowVersionApprovalsHandler(w http.ResponseWriter, r 
 		actor := request.Actor
 		idempotencyKey := request.IdempotencyKey
 		metadata := request.Metadata
-		if principal.TokenKey != "" {
+		if principal.AuthMode != "" {
 			actor = principal.Actor
+		}
+		if principal.TokenKey != "" {
 			if idempotencyKey == "" {
 				idempotencyKey = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 			}
@@ -12116,7 +12313,9 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(problemFor(status, message, w.Header().Get("X-Request-ID")))
 }
 
 func formatTime(value time.Time) string {

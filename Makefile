@@ -1,4 +1,6 @@
-.PHONY: test build fmt fmt-check check docs-check web-install web-build desktop-install desktop-build brand-export brand-validate package-a-readiness package-a-dirty-review package-a-source-hash package-a-authorization-packet package-b-readiness package-b-dirty-review package-b-authorization-packet smoke-package-a smoke-docker-package-a smoke-package-b-readiness smoke-docker-package-b-readiness smoke-package-a-fingerprint-parity smoke-docker-package-a-fingerprint-parity smoke-status-projection-schema smoke-fixture smoke-docker-fixture smoke-compatibility-fixture smoke-docker-compatibility-fixture smoke-areamatrix-readonly smoke-docker-areamatrix-readonly smoke-shim-authorization-preflight smoke-docker-shim-authorization-preflight smoke-local smoke-docker smoke-approved-artifact-write smoke-docker-approved-artifact-write smoke-managed-generated-write smoke-docker-managed-generated-write smoke-execution-plan smoke-docker-execution-plan smoke-execution-forwarding-v1-readiness smoke-docker-execution-forwarding-v1-readiness smoke-completion-proof smoke-docker-completion-proof smoke-completion-audit-full-proof smoke-docker-completion-audit-full-proof smoke-completion-audit-release-candidate-snapshot smoke-docker-completion-audit-release-candidate-snapshot smoke-completion-audit-real-identity-readiness smoke-docker-completion-audit-real-identity-readiness smoke-completion-audit-real-identity-protected-path-proof smoke-docker-completion-audit-real-identity-protected-path-proof smoke-completion-audit-real-identity-fixture-snapshot smoke-docker-completion-audit-real-identity-fixture-snapshot smoke-execution-cutover-proof smoke-docker-execution-cutover-proof smoke-validation-proof smoke-docker-validation-proof smoke-source-alignment-proof smoke-docker-source-alignment-proof smoke-task-matrix-proof smoke-docker-task-matrix-proof smoke-security-closure-proof smoke-docker-security-closure-proof smoke-operations-proof smoke-docker-operations-proof smoke-backup-restore-proof smoke-docker-backup-restore-proof smoke-release-packaging-proof smoke-docker-release-packaging-proof smoke-v1-stable-fixture smoke-docker-v1-stable-fixture smoke-project-isolation smoke-docker-project-isolation smoke-web smoke-docker-web smoke-web-areamatrix-readonly smoke-docker-web-areamatrix-readonly smoke-graceful-shutdown smoke-docker-graceful-shutdown
+.PHONY: test build fmt fmt-check check docs-check governance-check contract-check web-install web-build desktop-install desktop-build brand-export brand-validate package-a-readiness package-a-dirty-review package-a-source-hash package-a-authorization-packet package-b-readiness package-b-dirty-review package-b-authorization-packet smoke-package-a smoke-docker-package-a smoke-package-b-readiness smoke-docker-package-b-readiness smoke-package-a-fingerprint-parity smoke-docker-package-a-fingerprint-parity smoke-status-projection-schema smoke-fixture smoke-docker-fixture smoke-compatibility-fixture smoke-docker-compatibility-fixture smoke-areamatrix-readonly smoke-docker-areamatrix-readonly smoke-shim-authorization-preflight smoke-docker-shim-authorization-preflight smoke-local smoke-docker smoke-approved-artifact-write smoke-docker-approved-artifact-write smoke-managed-generated-write smoke-docker-managed-generated-write smoke-execution-plan smoke-docker-execution-plan smoke-execution-forwarding-v1-readiness smoke-docker-execution-forwarding-v1-readiness smoke-completion-proof smoke-docker-completion-proof smoke-completion-audit-full-proof smoke-docker-completion-audit-full-proof smoke-completion-audit-release-candidate-snapshot smoke-docker-completion-audit-release-candidate-snapshot smoke-completion-audit-real-identity-readiness smoke-docker-completion-audit-real-identity-readiness smoke-completion-audit-real-identity-protected-path-proof smoke-docker-completion-audit-real-identity-protected-path-proof smoke-completion-audit-real-identity-fixture-snapshot smoke-docker-completion-audit-real-identity-fixture-snapshot smoke-execution-cutover-proof smoke-docker-execution-cutover-proof smoke-validation-proof smoke-docker-validation-proof smoke-source-alignment-proof smoke-docker-source-alignment-proof smoke-task-matrix-proof smoke-docker-task-matrix-proof smoke-security-closure-proof smoke-docker-security-closure-proof smoke-operations-proof smoke-docker-operations-proof smoke-backup-restore-proof smoke-docker-backup-restore-proof smoke-release-packaging-proof smoke-docker-release-packaging-proof smoke-v1-stable-fixture smoke-docker-v1-stable-fixture smoke-project-isolation smoke-docker-project-isolation smoke-web smoke-docker-web smoke-web-areamatrix-readonly smoke-docker-web-areamatrix-readonly smoke-graceful-shutdown smoke-docker-graceful-shutdown
+.PHONY: security-check release-check smoke-append-only smoke-docker-append-only smoke-s3-minio smoke-s3-artifact smoke-ha-local smoke-production-ha smoke-production-capacity smoke-docker-ha-local smoke-auth-postgres smoke-oidc-rbac smoke-docker-auth-postgres smoke-openapi-contract smoke-upgrade-rollback
+.PHONY: production-smoke load-check
 
 fmt:
 	go fmt ./...
@@ -29,13 +31,76 @@ docs-check:
 	node scripts/check-doc-links.mjs
 	node scripts/check-doc-governance.mjs
 
+governance-check:
+	node scripts/check-asw-governance.mjs
+
+contract-check:
+	node scripts/check-openapi-contract.mjs
+	node scripts/check-control-plane-boundary.mjs
+	node scripts/check-production-observability.mjs
+
+security-check:
+	go vet ./...
+	go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+	npm audit --audit-level=high
+	npm audit --audit-level=high --prefix web
+	npm audit --audit-level=high --prefix desktop
+	node scripts/check-license-policy.mjs
+
+release-check: check
+	node scripts/check-release-contract.mjs v1.0.0
+	docker build --build-arg VERSION=1.0.0 --build-arg COMMIT=local --build-arg BUILD_DATE=local -t areaflow:1.0.0-rc .
+
+smoke-append-only:
+	bash scripts/smoke-append-only.sh
+
+smoke-docker-append-only:
+	AREAFLOW_SMOKE_SCRIPT=scripts/smoke-append-only.sh bash scripts/smoke-docker.sh
+
+smoke-s3-minio:
+	bash scripts/smoke-s3-minio.sh
+
+smoke-s3-artifact:
+	bash scripts/smoke-s3-artifact.sh
+
+smoke-ha-local:
+	bash scripts/smoke-ha-local.sh
+
+smoke-production-ha:
+	bash scripts/smoke-production-ha.sh
+
+smoke-production-capacity:
+	bash scripts/smoke-production-capacity.sh
+
+smoke-docker-ha-local:
+	AREAFLOW_SMOKE_SCRIPT=scripts/smoke-ha-local.sh bash scripts/smoke-docker.sh
+
+smoke-auth-postgres:
+	bash scripts/smoke-auth-postgres.sh
+
+smoke-oidc-rbac:
+	bash scripts/smoke-oidc-rbac.sh
+
+smoke-openapi-contract:
+	bash scripts/smoke-openapi-contract.sh
+
+smoke-upgrade-rollback:
+	bash scripts/smoke-upgrade-rollback.sh
+
+production-smoke: smoke-openapi-contract smoke-append-only smoke-oidc-rbac smoke-project-isolation smoke-s3-artifact smoke-upgrade-rollback smoke-backup-restore-proof smoke-production-ha smoke-graceful-shutdown smoke-web
+
+load-check: smoke-production-capacity
+
+smoke-docker-auth-postgres:
+	AREAFLOW_SMOKE_SCRIPT=scripts/smoke-auth-postgres.sh bash scripts/smoke-docker.sh
+
 brand-export:
 	npm run brand:export
 
 brand-validate:
 	npm run brand:validate
 
-check: fmt-check test build web-build desktop-build docs-check brand-validate
+check: fmt-check test build web-build desktop-build docs-check governance-check contract-check brand-validate
 
 package-a-readiness:
 	bash scripts/audit-package-a-readiness.sh

@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/areasong/areaflow/internal/artifact"
 )
 
 type ArtifactIntegrityOptions struct {
@@ -123,13 +125,8 @@ func checkArtifactIntegrity(artifact ArtifactRecord) ArtifactIntegrityCheck {
 		return checkLocalArtifactIntegrity(artifact)
 	case "external_project", "project_reference":
 		return checkReferencedArtifactIntegrity(artifact)
-	case "object":
-		return ArtifactIntegrityCheck{
-			Artifact: artifact,
-			Status:   "skipped",
-			Message:  "object storage artifact integrity is not checked by local doctor",
-			Metadata: map[string]any{"storage_backend": artifact.StorageBackend, "read_contents": false},
-		}
+	case "s3", "object":
+		return checkRemoteArtifactIntegrity(artifact)
 	default:
 		return ArtifactIntegrityCheck{
 			Artifact: artifact,
@@ -138,6 +135,35 @@ func checkArtifactIntegrity(artifact ArtifactRecord) ArtifactIntegrityCheck {
 			Metadata: map[string]any{"storage_backend": artifact.StorageBackend, "read_contents": false},
 		}
 	}
+}
+
+func checkRemoteArtifactIntegrity(record ArtifactRecord) ArtifactIntegrityCheck {
+	content, err := artifact.ReadConfigured(context.Background(), record.StorageBackend, record.URI)
+	if err != nil {
+		return ArtifactIntegrityCheck{
+			Artifact: record, Status: "fail", Message: "object artifact is not readable",
+			Metadata: map[string]any{"storage_backend": record.StorageBackend, "uri": record.URI, "error": err.Error(), "read_contents": false},
+		}
+	}
+	digest := sha256.Sum256(content)
+	actualSHA := hex.EncodeToString(digest[:])
+	failures := []string{}
+	if record.SHA256 == "" || record.SHA256 != actualSHA {
+		failures = append(failures, "sha256_missing_or_mismatch")
+	}
+	if record.SizeBytes <= 0 || record.SizeBytes != int64(len(content)) {
+		failures = append(failures, "size_missing_or_mismatch")
+	}
+	metadata := map[string]any{
+		"storage_backend": record.StorageBackend, "uri": record.URI, "read_contents": true,
+		"expected_sha256": record.SHA256, "actual_sha256": actualSHA,
+		"expected_size": record.SizeBytes, "actual_size": len(content),
+	}
+	if len(failures) > 0 {
+		metadata["failures"] = failures
+		return ArtifactIntegrityCheck{Artifact: record, Status: "fail", Message: "object artifact metadata does not match stored content", Metadata: metadata}
+	}
+	return ArtifactIntegrityCheck{Artifact: record, Status: "pass", Message: "object artifact hash and size match metadata", Metadata: metadata}
 }
 
 func checkLocalArtifactIntegrity(artifact ArtifactRecord) ArtifactIntegrityCheck {

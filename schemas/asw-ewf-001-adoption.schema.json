@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://areasong.dev/schemas/asw-ewf-001-adoption.schema.json",
+  "title": "AreaFlow ASW-EWF-001 adoption record",
+  "type": "object",
+  "required": ["schema_version", "spec", "scope", "roles", "controls", "external_dependencies"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "spec": {
+      "type": "object",
+      "required": ["id", "version", "source", "sha256", "adopted_at", "next_review_at"]
+    },
+    "scope": {"type": "object"},
+    "roles": {"type": "object", "minProperties": 1},
+    "controls": {
+      "type": "array",
+      "minItems": 9,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status", "owner", "evidence"],
+        "properties": {
+          "status": {"enum": ["satisfied", "partial", "blocked_external", "not_applicable"]},
+          "evidence": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "external_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "owner", "status", "condition", "verification"],
+        "properties": {"status": {"const": "blocked_external"}}
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 ## 支持范围
 
-当前安全边界以 [`docs/architecture/security.md`](docs/architecture/security.md) 和 [`governance/security/README.md`](governance/security/README.md) 为准。AreaFlow API 只允许 loopback 监听；远程认证、TLS、tokens、secret resolve 和 remote workers 尚未开放。
+当前安全边界以 [`docs/architecture/security.md`](docs/architecture/security.md)、[`docs/architecture/threat-model.md`](docs/architecture/threat-model.md) 和 [`governance/security/README.md`](governance/security/README.md) 为准。production 强制企业 OIDC、HTTPS public URL、可信代理、PostgreSQL TLS、S3 和 OTLP；Web session、project RBAC 与 scoped service token 已开放。TLS/LB、OIDC tenant、secret manager、HA PostgreSQL 和监控平台由部署组织负责。Secret resolve、remote workers、webhooks 和 plugin execution 尚未开放。
 
 ## 报告漏洞
 

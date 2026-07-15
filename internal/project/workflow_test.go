@@ -521,6 +521,18 @@ func TestEvaluateRunnerPreflightPassesDryRunLowRisk(t *testing.T) {
 	}
 }
 
+func TestHighRiskApprovalRequiresDifferentActor(t *testing.T) {
+	if !highRiskApproval("L4") || !highRiskApproval("critical") || highRiskApproval("normal") {
+		t.Fatal("unexpected high-risk classification")
+	}
+	if !sameActor("Requester", "requester") {
+		t.Fatal("same actor should be matched case-insensitively")
+	}
+	if sameActor("approver", "requester") {
+		t.Fatal("different actors must not match")
+	}
+}
+
 func skeletonWorkflowItem(id int64, versionID int64, stage string, itemType string) WorkflowItem {
 	return WorkflowItem{
 		ID:                id,

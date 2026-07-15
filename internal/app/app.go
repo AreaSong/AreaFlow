@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/areasong/areaflow/internal/api"
-	"github.com/areasong/areaflow/internal/auth"
 	backuppackage "github.com/areasong/areaflow/internal/backup"
 	"github.com/areasong/areaflow/internal/config"
 	"github.com/areasong/areaflow/internal/db"
@@ -22,6 +22,7 @@ import (
 	"github.com/areasong/areaflow/internal/migrate"
 	"github.com/areasong/areaflow/internal/project"
 	statusmirror "github.com/areasong/areaflow/internal/status"
+	"github.com/areasong/areaflow/internal/version"
 	workflowprofile "github.com/areasong/areaflow/internal/workflow"
 )
 
@@ -3558,7 +3559,10 @@ func (c command) run(ctx context.Context, args []string) error {
 		c.printHelp()
 		return nil
 	case "version":
-		fmt.Fprintln(c.stdout, "areaflow phase-0.1")
+		if len(args) > 1 && args[1] == "--json" {
+			return c.printJSON(version.Current())
+		}
+		fmt.Fprintln(c.stdout, version.String())
 		return nil
 	case "server":
 		cfg := config.FromEnv()
@@ -6233,106 +6237,6 @@ func (c command) runBackup(ctx context.Context, args []string) error {
 	}
 }
 
-func (c command) runAuth(ctx context.Context, args []string) error {
-	if len(args) < 2 || args[0] != "token" {
-		return fmt.Errorf("usage: areaflow auth token <create|list|revoke>")
-	}
-	cfg := config.FromEnv()
-	pool, err := db.Open(ctx, cfg.Database)
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
-	service := auth.NewService(pool)
-
-	switch args[1] {
-	case "create":
-		flags := flag.NewFlagSet("auth token create", flag.ContinueOnError)
-		flags.SetOutput(c.stderr)
-		actor := flags.String("actor", "", "audit actor")
-		reason := flags.String("reason", "", "creation reason")
-		expiresAtValue := flags.String("expires-at", "", "RFC3339 expiration")
-		jsonOutput := flags.Bool("json", false, "JSON output")
-		var projects stringListFlag
-		var capabilities stringListFlag
-		flags.Var(&projects, "project", "allowed project key; repeatable, * for all")
-		flags.Var(&capabilities, "capability", "allowed capability; repeatable")
-		if err := flags.Parse(args[2:]); err != nil {
-			return err
-		}
-		var expiresAt *time.Time
-		if strings.TrimSpace(*expiresAtValue) != "" {
-			parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*expiresAtValue))
-			if err != nil {
-				return fmt.Errorf("parse expires-at: %w", err)
-			}
-			expiresAt = &parsed
-		}
-		created, err := service.CreateToken(ctx, auth.CreateTokenOptions{
-			Actor: *actor, Reason: *reason, Projects: projects, Capabilities: capabilities, ExpiresAt: expiresAt,
-		})
-		if err != nil {
-			return err
-		}
-		if *jsonOutput {
-			return c.printJSON(map[string]any{
-				"token": created.Token, "token_key": created.Record.TokenKey, "actor": created.Record.Actor,
-				"projects": created.Record.Projects, "capabilities": created.Record.Capabilities,
-				"expires_at": created.Record.ExpiresAt, "created_at": created.Record.CreatedAt,
-			})
-		}
-		fmt.Fprintf(c.stdout, "token %s\n", created.Token)
-		fmt.Fprintf(c.stdout, "token_key %s\n", created.Record.TokenKey)
-		fmt.Fprintln(c.stdout, "The token is shown once; store it in a secure local credential store.")
-		return nil
-	case "list":
-		jsonOutput, err := outputJSON(args[2:])
-		if err != nil {
-			return err
-		}
-		records, err := service.ListTokens(ctx)
-		if err != nil {
-			return err
-		}
-		if jsonOutput {
-			return c.printJSON(records)
-		}
-		for _, record := range records {
-			fmt.Fprintf(c.stdout, "%s\t%s\t%s\t%s\n", record.TokenKey, record.Status, record.Actor, strings.Join(record.Projects, ","))
-		}
-		return nil
-	case "revoke":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: areaflow auth token revoke <token-key> --actor ACTOR --reason TEXT")
-		}
-		flags := flag.NewFlagSet("auth token revoke", flag.ContinueOnError)
-		flags.SetOutput(c.stderr)
-		actor := flags.String("actor", "", "audit actor")
-		reason := flags.String("reason", "", "revocation reason")
-		if err := flags.Parse(args[3:]); err != nil {
-			return err
-		}
-		if err := service.RevokeToken(ctx, args[2], *actor, *reason); err != nil {
-			return err
-		}
-		fmt.Fprintf(c.stdout, "revoked %s\n", args[2])
-		return nil
-	default:
-		return fmt.Errorf("unknown auth token command %q", args[1])
-	}
-}
-
-type stringListFlag []string
-
-func (f *stringListFlag) String() string {
-	return strings.Join(*f, ",")
-}
-
-func (f *stringListFlag) Set(value string) error {
-	*f = append(*f, value)
-	return nil
-}
-
 func (c command) runRelease(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing release command: use `areaflow release readiness`, `areaflow release remediation-plan`, `areaflow release acceptance-preview`, `areaflow release acceptance-gate`, `areaflow release exception-doctor`, `areaflow release exception-record-preview`, `areaflow release exception-schema-preview`, `areaflow release exception-migration-approval-gate`, `areaflow release exception-apply-preview`, `areaflow release final-gate`, `areaflow release evidence-bundle`, `areaflow release package-preview`, `areaflow release distribution-preview`, `areaflow release publish-gate`, `areaflow release publish-approval-preview`, or `areaflow release rollout-plan-preview`")
@@ -6847,6 +6751,8 @@ func (c command) runArtifact(ctx context.Context, args []string) error {
 		return fmt.Errorf("missing artifact command: use `areaflow artifact integrity <project>` or `areaflow artifact archive-preview <project>`")
 	}
 	switch args[0] {
+	case "migration":
+		return c.runArtifactMigration(ctx, args[1:])
 	case "integrity":
 		if len(args) < 2 {
 			return fmt.Errorf("missing project id: use `areaflow artifact integrity <project>`")
@@ -9596,16 +9502,16 @@ func executionForwardingV1CommandPreviewFlagsFromArgs(args []string) (executionF
 			flags.json = true
 		case "--task-type":
 			if i+1 >= len(args) {
-				return executionForwardingV1CommandPreviewFlags{}, fmt.Errorf(usage)
+				return executionForwardingV1CommandPreviewFlags{}, errors.New(usage)
 			}
 			flags.taskType = strings.TrimSpace(args[i+1])
 			i++
 		default:
-			return executionForwardingV1CommandPreviewFlags{}, fmt.Errorf(usage)
+			return executionForwardingV1CommandPreviewFlags{}, errors.New(usage)
 		}
 	}
 	if flags.taskType == "" {
-		return executionForwardingV1CommandPreviewFlags{}, fmt.Errorf(usage)
+		return executionForwardingV1CommandPreviewFlags{}, errors.New(usage)
 	}
 	return flags, nil
 }

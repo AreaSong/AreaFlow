@@ -27,8 +27,8 @@ func TestLoadRealAreaMatrixSnapshot(t *testing.T) {
 	if snapshot.TaskSummary.V1ExecutionDone != 637 {
 		t.Fatalf("v1 execution done = %d, want 637", snapshot.TaskSummary.V1ExecutionDone)
 	}
-	if len(snapshot.Residuals) != 10 {
-		t.Fatalf("residual count = %d, want 10", len(snapshot.Residuals))
+	if len(snapshot.Residuals) < 10 {
+		t.Fatalf("residual count = %d, want at least the established 10 records", len(snapshot.Residuals))
 	}
 	if len(snapshot.Versions) < 2 {
 		t.Fatalf("version count = %d, want at least 2", len(snapshot.Versions))

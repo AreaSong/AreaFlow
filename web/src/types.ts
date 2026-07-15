@@ -207,16 +207,39 @@ export type TransitionPreviewsResponse = {
 };
 
 export type AuthStatus = {
-  mode: "disabled" | "token";
+  mode: "disabled" | "token" | "oidc";
   requires_token: boolean;
+  requires_login: boolean;
+  login_url: string;
 };
 
 export type AuthPrincipal = {
   actor: string;
   token_key: string;
+  user_id: number;
+  auth_mode: "" | "token" | "oidc";
+  roles: string[];
   projects: string[];
   capabilities: string[];
   scope_hash: string;
+};
+
+export type RoleBinding = {
+  id: number;
+  project_id?: number;
+  project_key?: string;
+  user_id?: number;
+  team_id?: number;
+  role: string;
+  status: string;
+  reason: string;
+  expires_at?: string;
+  created_at: string;
+};
+
+export type RoleBindingsResponse = {
+  project_key: string;
+  role_bindings: RoleBinding[];
 };
 
 export type RunRecord = {

@@ -634,9 +634,6 @@ FOR UPDATE SKIP LOCKED`,
 }
 
 func writeAndInsertApprovedArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, worker WorkerRecord, task RunTaskRecord, lease LeaseRecord, gate ExecutionApprovalGate, artifactLabel string, options ApprovedArtifactWriteOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"project":                           record.Key,
 		"workflow_version":                  version.DisplayLabel,
@@ -667,7 +664,7 @@ func writeAndInsertApprovedArtifact(ctx context.Context, tx pgx.Tx, record Recor
 		return ArtifactRecord{}, fmt.Errorf("marshal approved artifact write report: %w", err)
 	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "approved-artifact-write", fmt.Sprintf("run-%d-task-%d-%s.json", run.ID, task.ID, artifactLabel))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}

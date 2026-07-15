@@ -305,7 +305,7 @@ func gateStatusBool(ok bool) string {
 func (s Store) projectRecordByID(ctx context.Context, projectID int64) (Record, error) {
 	var record Record
 	err := s.pool.QueryRow(ctx, `
-SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, p.default_branch,
+SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, COALESCE(p.default_branch, ''),
        COALESCE(c.root_path, ''), COALESCE(a.remote_url, ''), COALESCE(a.root_path, '')
 FROM projects p
 LEFT JOIN LATERAL (

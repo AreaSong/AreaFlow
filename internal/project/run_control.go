@@ -459,7 +459,7 @@ func loadProjectRecordByID(ctx context.Context, tx pgx.Tx, projectID int64) (Rec
 	}
 	var record Record
 	err := tx.QueryRow(ctx, `
-SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, p.default_branch,
+SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, COALESCE(p.default_branch, ''),
        COALESCE(c.root_path, ''), COALESCE(a.remote_url, ''), COALESCE(a.root_path, '')
 FROM projects p
 LEFT JOIN LATERAL (

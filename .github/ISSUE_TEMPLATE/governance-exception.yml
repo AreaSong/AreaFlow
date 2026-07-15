@@ -1,0 +1,19 @@
+name: Governance exception
+description: Request a time-limited ASW-EWF-001 exception
+body:
+  - type: input
+    id: control
+    attributes: {label: Control or gate}
+    validations: {required: true}
+  - type: textarea
+    id: reason
+    attributes: {label: Reason, scope and risk acceptor}
+    validations: {required: true}
+  - type: input
+    id: expires
+    attributes: {label: Expiration date}
+    validations: {required: true}
+  - type: textarea
+    id: controls
+    attributes: {label: Compensating controls and closure evidence}
+    validations: {required: true}

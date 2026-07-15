@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "spec": {
+    "id": "ASW-EWF-001",
+    "version": "1.0.0",
+    "source": "governance/baselines/ASW-EWF-001-v1.0.0.md",
+    "sha256": "ce6a779f243f54440ab9a82886a0d8d0c8a601243260fcdb829beed3f04c96f1",
+    "adopted_at": "2026-07-15",
+    "next_review_at": "2026-10-15"
+  },
+  "scope": {
+    "project_type": "public-open-source-single-tenant-production-platform",
+    "release_target": "v1.0.0",
+    "change_risk": "L4",
+    "production_slo": "99.9% monthly availability",
+    "rto": "4h",
+    "rpo": "1h",
+    "repository_controls_status": "satisfied",
+    "production_activation_status": "blocked_external"
+  },
+  "roles": {
+    "executive_sponsor": "repository_owner",
+    "product_owner": "repository_owner",
+    "technical_owner": "maintainer",
+    "security_owner": "security_maintainer",
+    "operations_owner": "operations_maintainer",
+    "release_owner": "release_maintainer",
+    "data_owner": "repository_owner"
+  },
+  "controls": [
+    {"id":"G0","title":"需求登记","status":"satisfied","owner":"product_owner","evidence":["governance/asw-ewf-001-adoption.yaml"]},
+    {"id":"G1","title":"立项审批","status":"satisfied","owner":"executive_sponsor","evidence":["governance/asw-ewf-001-adoption.yaml"]},
+    {"id":"G2","title":"需求就绪","status":"satisfied","owner":"product_owner","evidence":["governance/README.md","AGENTS.md"]},
+    {"id":"G3","title":"设计就绪","status":"satisfied","owner":"technical_owner","evidence":["docs/architecture/overview.md","docs/architecture/security.md","docs/architecture/data-model.md"]},
+    {"id":"G4","title":"开发就绪","status":"satisfied","owner":"technical_owner","evidence":["CONTRIBUTING.md","Makefile"]},
+    {"id":"G5","title":"合并就绪","status":"satisfied","owner":"technical_owner","evidence":[".github/workflows/check.yml",".github/workflows/security.yml","Makefile","scripts/smoke-oidc-rbac.sh","scripts/smoke-append-only.sh","scripts/smoke-s3-artifact.sh","scripts/smoke-production-ha.sh","scripts/smoke-production-capacity.sh","scripts/smoke-upgrade-rollback.sh","scripts/smoke-backup-restore-proof.sh","scripts/smoke-openapi-contract.sh","scripts/check-production-observability.mjs"]},
+    {"id":"G6","title":"发布就绪","status":"partial","owner":"release_owner","evidence":["docs/operations/release.md"],"close_when":"v1.0.0 release candidate、SBOM、签名、灰度和回滚验证通过"},
+    {"id":"G7","title":"结果关闭","status":"blocked_external","owner":"operations_owner","evidence":[],"close_when":"生产连续观察 14 天并完成 30 天业务效果复核"},
+    {"id":"G8","title":"退役关闭","status":"satisfied","owner":"product_owner","evidence":["docs/operations/deprecation-and-retirement.md","docs/roadmap.md"]},
+    {"id":"SECURITY","title":"安全、权限与隐私","status":"satisfied","owner":"security_owner","evidence":["docs/architecture/security.md","docs/architecture/threat-model.md","governance/security/README.md","internal/api/auth_integration_test.go","internal/api/security_middleware_test.go","scripts/smoke-oidc-rbac.sh","scripts/smoke-append-only.sh","migrations/000020_v1_append_only_enforcement.sql"]},
+    {"id":"DATA","title":"数据、迁移与保留","status":"satisfied","owner":"data_owner","evidence":["docs/architecture/data-model.md","docs/operations/backup-and-restore.md","internal/project/artifact_migration.go","scripts/smoke-s3-artifact.sh","scripts/smoke-upgrade-rollback.sh","scripts/smoke-backup-restore-proof.sh","migrations/000015_v1_oidc_identity.sql","migrations/000016_v1_project_rbac.sql","migrations/000017_v1_web_sessions.sql","migrations/000018_v1_token_lifecycle.sql","migrations/000019_v1_artifact_retention.sql","migrations/000020_v1_append_only_enforcement.sql"]},
+    {"id":"API","title":"API 与兼容性","status":"satisfied","owner":"technical_owner","evidence":["docs/reference/api.md","docs/reference/openapi.yaml","scripts/smoke-openapi-contract.sh","scripts/check-openapi-contract.mjs","docs/operations/deprecation-and-retirement.md"]},
+    {"id":"RELIABILITY","title":"性能与可靠性","status":"satisfied","owner":"operations_owner","evidence":["docs/operations/deployment.md","docs/operations/observability.md","scripts/smoke-production-ha.sh","scripts/smoke-production-capacity.sh","scripts/smoke-s3-artifact.sh","scripts/smoke-backup-restore-proof.sh"]},
+    {"id":"SUPPLY_CHAIN","title":"开源与供应链","status":"partial","owner":"release_owner","evidence":["LICENSE","SECURITY.md",".github/workflows/release.yml","scripts/check-license-policy.mjs","scripts/check-release-contract.mjs"],"close_when":"SBOM、漏洞扫描、provenance、签名和 release workflow 通过"}
+  ],
+  "external_dependencies": [
+    {"id":"EXT-OIDC","owner":"security_owner","status":"blocked_external","condition":"企业 OIDC issuer、client、redirect URI、groups claim 和 secret reference 可用","verification":"真实登录、登出、撤销和角色映射 smoke"},
+    {"id":"EXT-TLS-LB","owner":"operations_owner","status":"blocked_external","condition":"DNS、TLS、双副本负载均衡和可信代理完成配置","verification":"单副本故障期间持续通过生产健康与请求验证"},
+    {"id":"EXT-POSTGRES","owner":"data_owner","status":"blocked_external","condition":"HA PostgreSQL、TLS、PITR 和自动故障切换可用","verification":"隔离恢复演练证明 RTO 4h、RPO 1h"},
+    {"id":"EXT-S3","owner":"data_owner","status":"blocked_external","condition":"S3 bucket 启用版本化、服务端加密和生命周期","verification":"真实对象写入、hash、版本恢复和归档验证"},
+    {"id":"EXT-OBS","owner":"operations_owner","status":"blocked_external","condition":"OTLP、Prometheus、日志、告警和值班渠道可用","verification":"告警送达、trace 查询和事故演练"},
+    {"id":"EXT-GITHUB","owner":"release_owner","status":"blocked_external","condition":"branch protection、required checks、release environment、OIDC trust 和私有漏洞报告启用","verification":"GitHub 设置回读和受保护 release dry run"},
+    {"id":"EXT-BUDGET","owner":"executive_sponsor","status":"blocked_external","condition":"月度生产预算与 80%/100% 阈值获批","verification":"成本看板和阈值告警测试"},
+    {"id":"EXT-RELEASE","owner":"release_owner","status":"blocked_external","condition":"push、tag、公开 release 和生产部署获得明确授权","verification":"签名 v1.0.0 release 与生产部署回读"},
+    {"id":"EXT-OBSERVATION","owner":"product_owner","status":"blocked_external","condition":"生产可连续观察 14 天并在 30 天复核业务效果","verification":"SLO 报告、事故清单和业务效果评审"}
+  ]
+}

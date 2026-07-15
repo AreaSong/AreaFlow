@@ -1236,6 +1236,9 @@ func assertLeaseStatus(ctx context.Context, t *testing.T, pool *pgxpool.Pool, le
 
 func cleanupProjectIsolationFixture(ctx context.Context, t *testing.T, pool *pgxpool.Pool, fixtureKey string, projectKeys ...string) {
 	t.Helper()
+	if os.Getenv("AREAFLOW_TEST_ISOLATED_SCHEMA") == "1" {
+		return
+	}
 	if strings.TrimSpace(fixtureKey) == "" {
 		return
 	}

@@ -1,7 +1,7 @@
 {
   "name": "@areasong/areaflow-tooling",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "scripts": {
     "brand:export": "node scripts/generate-areaflow-brand-assets.cjs",
     "brand:validate": "node scripts/validate-areaflow-brand-assets.cjs"

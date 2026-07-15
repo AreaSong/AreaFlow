@@ -12,8 +12,8 @@ func TestList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list migrations: %v", err)
 	}
-	if len(migrations) != 14 {
-		t.Fatalf("migration count = %d, want 14", len(migrations))
+	if len(migrations) != 20 {
+		t.Fatalf("migration count = %d, want 20", len(migrations))
 	}
 	if migrations[0].Name != "000001_v0_1_core.sql" {
 		t.Fatalf("migration name = %q", migrations[0].Name)
@@ -57,9 +57,38 @@ func TestList(t *testing.T) {
 	if migrations[13].Name != "000014_v1_project_history_attribution.sql" {
 		t.Fatalf("migration name = %q", migrations[13].Name)
 	}
+	if migrations[19].Name != "000020_v1_append_only_enforcement.sql" {
+		t.Fatalf("migration name = %q", migrations[19].Name)
+	}
 	for _, migration := range migrations {
 		if migration.SQL == "" {
 			t.Fatalf("migration %s SQL is empty", migration.Name)
+		}
+	}
+}
+
+func TestProductionGovernanceMigrations(t *testing.T) {
+	migrations, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	required := map[string][]string{
+		"000015_v1_oidc_identity.sql":           {"CREATE TABLE IF NOT EXISTS user_identities", "UNIQUE (issuer, subject)"},
+		"000016_v1_project_rbac.sql":            {"CREATE TABLE IF NOT EXISTS project_role_bindings", "platform_admin", "approver"},
+		"000017_v1_web_sessions.sql":            {"CREATE TABLE IF NOT EXISTS web_sessions", "csrf_hash", "absolute_expires_at"},
+		"000018_v1_token_lifecycle.sql":         {"rotated_from_token_id", "created_by_actor_id", "token_type"},
+		"000019_v1_artifact_retention.sql":      {"retention_class", "legal_hold", "archive_status"},
+		"000020_v1_append_only_enforcement.sql": {"reject_append_only_history_mutation", "events_append_only_trigger", "audit_events_append_only_trigger"},
+	}
+	byName := map[string]string{}
+	for _, migration := range migrations {
+		byName[migration.Name] = migration.SQL
+	}
+	for name, fragments := range required {
+		for _, fragment := range fragments {
+			if !strings.Contains(byName[name], fragment) {
+				t.Fatalf("migration %s missing %q", name, fragment)
+			}
 		}
 	}
 }
@@ -231,6 +260,18 @@ func TestEmbeddedMigrationMatchesRootMigration(t *testing.T) {
 		}
 		if string(rootSQL) != migration.SQL {
 			t.Fatalf("embedded migration %s differs from root migration", migration.Name)
+		}
+	}
+}
+
+func TestMigrationRunnerDoesNotHardcodePublicSchema(t *testing.T) {
+	source, err := os.ReadFile("migrate.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"to_regclass('public.schema_migrations')", "to_regclass('public.migration_ledger')", "table_schema = 'public' AND table_name = 'schema_migrations'"} {
+		if strings.Contains(string(source), forbidden) {
+			t.Fatalf("migration runner hardcodes public schema: %s", forbidden)
 		}
 	}
 }

@@ -508,7 +508,7 @@ SELECT
     p.kind,
     p.adapter,
     p.workflow_profile,
-    p.default_branch,
+    COALESCE(p.default_branch, ''),
     COALESCE(local_path.root_path, ''),
     COALESCE(artifact_store.remote_url, ''),
     COALESCE(artifact_store.root_path, ''),
@@ -1919,9 +1919,6 @@ WHERE project_id = $1 AND id = $2`,
 }
 
 func writeAndInsertWorkerRunOnceArtifact(ctx context.Context, tx pgx.Tx, record Record, worker WorkerRecord, task RunTaskRecord, lease LeaseRecord, options WorkerRunOnceOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"project":              record.Key,
 		"worker_id":            worker.ID,
@@ -1944,7 +1941,7 @@ func writeAndInsertWorkerRunOnceArtifact(ctx context.Context, tx pgx.Tx, record 
 		return ArtifactRecord{}, fmt.Errorf("marshal worker run-once report: %w", err)
 	}
 	relativePath := filepath.Join("workers", worker.WorkerKey, "run-once", fmt.Sprintf("run-task-%d-report.json", task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}

@@ -1,6 +1,6 @@
 # Team And Remote Control Boundary
 
-> Status: Proposed. 当前产品未开放多用户 Team Console 或远程控制面。
+> Status: Proposed. 当前产品已开放 OIDC 登录和 project-scoped Access 页面，但未开放 team lifecycle、邀请、远程 worker 或通用远程控制面。
 
 ## Purpose
 
@@ -14,25 +14,22 @@ Team Console 是控制面，不是能力放大器。它可以把已有 Query API
 worker 和 release / restore preview 组合成多人可用界面；它不能绕过 project config、Command API、
 permission、gate、approval、secret scope、worker lease、restore gate、publish gate 或 audit。
 
-v1.0 前 Team Console 只允许作为路线、schema、readiness 或 blocked reason 出现。真实多用户登录、
-远程控制、团队权限 enforcement、API token enforcement、remote worker credential 和 secret resolve
-都属于 v1.x R4 能力。
+当前 project role binding 只覆盖已认证用户的项目角色管理，不等于 Team Console。团队生命周期、邀请、
+OIDC group 自动映射、remote worker credential、secret resolve 和通用远程 command apply 仍属于后续 R4 能力。
 
 ## Non-goals Before v1.x
 
-v1.0 之前禁止把以下能力解释为已打开：
+以下能力仍不得解释为已打开：
 
-- 远程团队登录、session、SSO 或邀请流程。
-- Team role / membership 对业务 API 的真实授权 enforcement。
-- API token issuance / rotation / revocation 作为真实远程入口。
+- Team invitation、membership lifecycle 或 OIDC group 自动映射。
+- Team role 对 project capability 之外能力的授权。
 - 远程 Web 控制台发起 Command API 写操作。
 - Desktop 变成远程团队控制台。
 - 远程 worker credential、远程 worker dispatch 或跨机器 execution。
 - 在 UI 中读取、显示、缓存或注入 secret 明文。
 - 用 team admin 角色绕过 R3/R4 approval、restore、publish、plugin、secret 或 worker gate。
 
-v1.0 可以做的是 security boundary readiness、role matrix preview、blocked reason、audit coverage gap 和
-read-only UI 设计。
+当前 Access 页面只管理 project role binding，不开放上述能力。
 
 ## Control Surface Classes
 

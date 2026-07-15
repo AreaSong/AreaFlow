@@ -5,6 +5,7 @@ import { ProjectRoute } from "./components/ProjectRoute";
 import { ProjectProvider } from "./context/ProjectContext";
 import { AuthGate } from "./context/AuthContext";
 import { ArtifactsPage } from "./pages/ArtifactsPage";
+import { AccessPage } from "./pages/AccessPage";
 import { AuditPage } from "./pages/AuditPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -33,6 +34,7 @@ export function RouterApp() {
             <Route path="artifacts" element={<ProjectRoute><ArtifactsPage /></ProjectRoute>} />
             <Route path="artifacts/:artifactId" element={<ProjectRoute><ArtifactsPage /></ProjectRoute>} />
             <Route path="audit" element={<ProjectRoute><AuditPage /></ProjectRoute>} />
+            <Route path="access" element={<ProjectRoute><AccessPage /></ProjectRoute>} />
             <Route path="operations" element={<ProjectRoute><OperationsPage /></ProjectRoute>} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>

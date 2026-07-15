@@ -2,7 +2,7 @@
 
 ## 环境要求
 
-- Go 1.23 或更高版本。
+- Go 1.25 或更高版本。
 - PostgreSQL 16 或兼容版本。
 - Node.js 和 npm，用于 Web 控制台。
 - Docker Compose，可选，用于启动仓库自带 PostgreSQL。

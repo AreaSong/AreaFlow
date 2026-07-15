@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -381,9 +380,6 @@ RETURNING id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_it
 }
 
 func writeAndInsertRunnerPreviewArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, task RunTaskRecord, options RunnerPreviewOptions, preflight RunnerPreflight) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"project":          record.Key,
 		"display_label":    version.DisplayLabel,
@@ -404,7 +400,7 @@ func writeAndInsertRunnerPreviewArtifact(ctx context.Context, tx pgx.Tx, record 
 		return ArtifactRecord{}, fmt.Errorf("marshal runner preview report: %w", err)
 	}
 	relativePath := filepath.Join(version.DisplayLabel, "runner-preview", fmt.Sprintf("run-%d-report.json", run.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}
@@ -789,22 +785,51 @@ func (s Store) GetArtifactContent(ctx context.Context, artifactID int64) (Artifa
 	if err != nil {
 		return ArtifactContent{}, err
 	}
-	return ReadArtifactContent(record)
+	content, primaryErr := readArtifactRecordContent(ctx, record)
+	if primaryErr == nil {
+		return content, nil
+	}
+	locations, err := s.artifactReadLocations(ctx, artifactID)
+	if err != nil {
+		return ArtifactContent{}, errors.Join(primaryErr, err)
+	}
+	for _, location := range locations {
+		if location.StorageBackend == record.StorageBackend && location.URI == record.URI {
+			continue
+		}
+		if location.Role == "migration_source" && artifactMetadataString(record.Metadata, "artifact_migration_status") != "observing" {
+			continue
+		}
+		fallback := record
+		fallback.StorageBackend = location.StorageBackend
+		fallback.URI = location.URI
+		fallback.SHA256 = location.SHA256
+		fallback.SizeBytes = location.SizeBytes
+		fallback.ContentType = location.ContentType
+		content, err := readArtifactRecordContent(ctx, fallback)
+		if err == nil {
+			content.Artifact = record
+			return content, nil
+		}
+		primaryErr = errors.Join(primaryErr, err)
+	}
+	return ArtifactContent{}, primaryErr
 }
 
 func ReadArtifactContent(record ArtifactRecord) (ArtifactContent, error) {
-	if record.StorageBackend != "local" {
+	return readArtifactRecordContent(context.Background(), record)
+}
+
+func readArtifactRecordContent(ctx context.Context, record ArtifactRecord) (ArtifactContent, error) {
+	if record.StorageBackend != "local" && record.StorageBackend != "s3" && record.StorageBackend != "object" {
 		return ArtifactContent{}, fmt.Errorf("%w: storage backend %q is metadata-only for content API", ErrArtifactContentUnavailable, record.StorageBackend)
 	}
 	if strings.TrimSpace(record.URI) == "" {
-		return ArtifactContent{}, fmt.Errorf("%w: local artifact URI is missing", ErrArtifactContentUnavailable)
+		return ArtifactContent{}, fmt.Errorf("%w: artifact URI is missing", ErrArtifactContentUnavailable)
 	}
-	content, err := os.ReadFile(record.URI)
+	content, err := artifact.ReadConfigured(ctx, record.StorageBackend, record.URI)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return ArtifactContent{}, fmt.Errorf("%w: local artifact file is missing", ErrArtifactContentUnavailable)
-		}
-		return ArtifactContent{}, fmt.Errorf("%w: read local artifact: %v", ErrArtifactContentUnavailable, err)
+		return ArtifactContent{}, fmt.Errorf("%w: read artifact: %v", ErrArtifactContentUnavailable, err)
 	}
 	sum := sha256.Sum256(content)
 	actualSHA := hex.EncodeToString(sum[:])

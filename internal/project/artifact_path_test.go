@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-func TestWriteLocalProjectArtifactUsesProjectNamespace(t *testing.T) {
+func TestWriteProjectArtifactUsesProjectNamespace(t *testing.T) {
 	root := t.TempDir()
-	stored, err := writeLocalProjectArtifact(
+	stored, err := writeProjectArtifact(
 		Record{Key: "areamatrix", ArtifactRoot: root},
 		filepath.Join("v2", "runs", "report.json"),
 		[]byte(`{"ok":true}`),
@@ -27,8 +27,8 @@ func TestWriteLocalProjectArtifactUsesProjectNamespace(t *testing.T) {
 	}
 }
 
-func TestWriteLocalProjectArtifactRejectsEscapingPath(t *testing.T) {
-	_, err := writeLocalProjectArtifact(
+func TestWriteProjectArtifactRejectsEscapingPath(t *testing.T) {
+	_, err := writeProjectArtifact(
 		Record{Key: "areamatrix", ArtifactRoot: t.TempDir()},
 		filepath.Join("..", "other", "report.json"),
 		[]byte("{}"),

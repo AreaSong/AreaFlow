@@ -9,6 +9,8 @@ fi
 project_key="${AREAFLOW_BACKUP_RESTORE_PROJECT_KEY:-areamatrix}"
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/areaflow-backup-restore.XXXXXX")"
 fixture_dir="$(cd "${fixture_dir}" && pwd -P)"
+base_database_url="${AREAFLOW_DATABASE_URL}"
+schema="areaflow_backup_restore_$$_${RANDOM}"
 project_root="${fixture_dir}/areamatrix-root"
 artifact_root="${fixture_dir}/artifact-store"
 config_path="${fixture_dir}/areaflow.yaml"
@@ -25,6 +27,7 @@ case "${fixture_dir}" in
 esac
 
 cleanup() {
+  psql "${base_database_url}" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS ${schema} CASCADE" >/dev/null 2>&1 || true
   if [[ "${AREAFLOW_KEEP_FIXTURE:-0}" == "1" ]]; then
     echo "smoke-backup-restore-proof: keeping fixture at ${fixture_dir}"
     return
@@ -32,6 +35,13 @@ cleanup() {
   rm -rf "${fixture_dir}"
 }
 trap cleanup EXIT
+
+psql "${base_database_url}" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA ${schema}" >/dev/null
+if [[ "${base_database_url}" == *\?* ]]; then
+  export AREAFLOW_DATABASE_URL="${base_database_url}&options=-csearch_path%3D${schema}"
+else
+  export AREAFLOW_DATABASE_URL="${base_database_url}?options=-csearch_path%3D${schema}"
+fi
 
 assert_contains() {
   local output="$1"
@@ -73,11 +83,12 @@ json_get() {
   local payload="$1"
   local path="$2"
 
-  JSON_PAYLOAD="${payload}" JSON_PATH="${path}" python3 - <<'PY'
+  JSON_PATH="${path}" python3 -c '
 import json
 import os
+import sys
 
-data = json.loads(os.environ["JSON_PAYLOAD"])
+data = json.load(sys.stdin)
 path = os.environ["JSON_PATH"]
 
 if path.startswith("len:"):
@@ -95,7 +106,7 @@ else:
         print(str(value).lower())
     else:
         print(value)
-PY
+' <<<"${payload}"
 }
 
 db_audit_row_counts() {

@@ -2963,7 +2963,7 @@ DO UPDATE SET
 func (s Store) GetByKey(ctx context.Context, key string) (Record, error) {
 	var record Record
 	err := s.pool.QueryRow(ctx, `
-SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, p.default_branch,
+SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, COALESCE(p.default_branch, ''),
        COALESCE(c.root_path, ''), COALESCE(a.remote_url, ''), COALESCE(a.root_path, '')
 FROM projects p
 LEFT JOIN LATERAL (
@@ -3002,7 +3002,7 @@ WHERE p.project_key = $1`,
 
 func (s Store) List(ctx context.Context) ([]Record, error) {
 	rows, err := s.pool.Query(ctx, `
-SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, p.default_branch,
+SELECT p.id, p.project_key, p.name, p.kind, p.adapter, p.workflow_profile, COALESCE(p.default_branch, ''),
        COALESCE(c.root_path, ''), COALESCE(a.remote_url, ''), COALESCE(a.root_path, '')
 FROM projects p
 LEFT JOIN LATERAL (

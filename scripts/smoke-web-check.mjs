@@ -54,10 +54,11 @@ try {
     ["/artifacts", "Artifacts"],
     ["/audit", "Audit"],
     ["/operations", "Operations"],
+    ["/access", "Access"],
   ];
   for (const [path, heading] of routes) {
     await openRoute(page, baseURL, path, projectKey, heading);
-    if (path !== "/operations") {
+    if (path !== "/operations" && path !== "/access") {
       await page.getByRole("combobox", { name: "Sort results" }).waitFor({ timeout: 20000 });
     }
   }
@@ -80,6 +81,7 @@ try {
     "/api/v1/artifacts",
     "/api/v1/audit-events",
     "/api/v1/ops/readiness",
+    `/api/v1/projects/${projectKey}/role-bindings`,
   ];
   for (const path of requiredPaths) {
     if (!seenPaths.has(path)) throw new Error(`required API path was not requested: ${path}`);
@@ -89,7 +91,7 @@ try {
   if (nonGetAPIRequests.length) throw new Error(`unexpected Web writes: ${nonGetAPIRequests.join(", ")}`);
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join(" | ")}`);
 
-  console.log(`smoke-web-check: ok mode=${mode} routes=9 api_paths=${seenPaths.size}`);
+  console.log(`smoke-web-check: ok mode=${mode} routes=10 api_paths=${seenPaths.size}`);
 } finally {
   await browser.close();
 }
@@ -98,7 +100,12 @@ async function openRoute(page, baseURL, path, projectKey, heading) {
   const url = new URL(path, baseURL);
   url.searchParams.set("project", projectKey);
   await page.goto(url.toString(), { waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 20000 });
+  try {
+    await page.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 20000 });
+  } catch (error) {
+    const body = (await page.locator("body").innerText().catch(() => "")).slice(0, 2000);
+    throw new Error(`route ${path} did not render ${heading}; url=${page.url()} body=${JSON.stringify(body)} failed_responses=${failedResponses.join(",")} page_errors=${pageErrors.join("|")}`, { cause: error });
+  }
   await page.waitForFunction(() => !document.body.innerText.includes("Loading "), null, { timeout: 20000 }).catch(() => undefined);
 }
 
@@ -170,7 +177,7 @@ async function verifyMobileLayout(page, baseURL, projectKey) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (overflow > 1) throw new Error(`mobile layout has ${overflow}px horizontal overflow`);
   const navLabels = await page.locator(".primary-nav a span").allTextContents();
-  if (navLabels.length !== 8 || navLabels.some((label) => !label.trim())) {
+  if (navLabels.length !== 9 || navLabels.some((label) => !label.trim())) {
     throw new Error(`mobile navigation labels are incomplete: ${navLabels.join(", ")}`);
   }
 }

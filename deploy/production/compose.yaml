@@ -1,0 +1,30 @@
+services:
+  api-a:
+    image: ${AREAFLOW_IMAGE:?set AREAFLOW_IMAGE to a signed immutable image digest}
+    command: ["server"]
+    env_file: [areaflow.env]
+    environment:
+      AREAFLOW_PORT: "3847"
+      AREAFLOW_METRICS_PORT: "9090"
+    ports:
+      - "127.0.0.1:3847:3847"
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ${AREAFLOW_SECRETS_DIR:?set AREAFLOW_SECRETS_DIR}:/run/secrets:ro
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+  api-b:
+    image: ${AREAFLOW_IMAGE:?set AREAFLOW_IMAGE to a signed immutable image digest}
+    command: ["server"]
+    env_file: [areaflow.env]
+    environment:
+      AREAFLOW_PORT: "3847"
+      AREAFLOW_METRICS_PORT: "9090"
+    ports:
+      - "127.0.0.1:3848:3847"
+      - "127.0.0.1:9091:9090"
+    volumes:
+      - ${AREAFLOW_SECRETS_DIR:?set AREAFLOW_SECRETS_DIR}:/run/secrets:ro
+    restart: unless-stopped
+    stop_grace_period: 10s

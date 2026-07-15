@@ -3,6 +3,7 @@ import type {
   ApprovalRecord,
   AuthPrincipal,
   AuthStatus,
+  RoleBindingsResponse,
   ArtifactListResponse,
   ArtifactRecord,
   AuditEventsResponse,
@@ -58,14 +59,20 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function csrfHeaders(): Record<string, string> {
+  const token = cookieValue("areaflow_csrf");
+  return token ? { "X-CSRF-Token": token } : {};
+}
+
 function handleUnauthorized(response: Response) {
-  if (response.status !== 401 || !sessionStorage.getItem(TOKEN_STORAGE_KEY)) return;
+	if (response.status !== 401) return;
   sessionStorage.removeItem(TOKEN_STORAGE_KEY);
   window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
 }
 
 async function getJSON<T>(path: string): Promise<T> {
   const response = await fetch(path, {
+    credentials: "same-origin",
     headers: {
       Accept: "application/json",
       ...authHeaders(),
@@ -81,7 +88,7 @@ async function getJSON<T>(path: string): Promise<T> {
 }
 
 async function getText(path: string) {
-  const response = await fetch(path, { headers: { Accept: "*/*", ...authHeaders() } });
+  const response = await fetch(path, { credentials: "same-origin", headers: { Accept: "*/*", ...authHeaders() } });
   handleUnauthorized(response);
   if (!response.ok) throw new Error(await responseError(response, path));
   return {
@@ -94,10 +101,12 @@ async function getText(path: string) {
 async function postJSON<T>(path: string, body: unknown, idempotencyKey: string): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
       "Idempotency-Key": idempotencyKey,
+      ...csrfHeaders(),
       ...authHeaders(),
     },
     body: JSON.stringify(body),
@@ -107,6 +116,31 @@ async function postJSON<T>(path: string, body: unknown, idempotencyKey: string):
     throw new Error(await responseError(response, path));
   }
   return (await response.json()) as T;
+}
+
+async function deleteJSON(path: string): Promise<void> {
+  const response = await fetch(path, {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", ...csrfHeaders(), ...authHeaders() },
+  });
+  if (!response.ok) {
+    handleUnauthorized(response);
+    throw new Error(await responseError(response, path));
+  }
+}
+
+async function postNoContent(path: string): Promise<void> {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...csrfHeaders(), ...authHeaders() },
+    body: "{}",
+  });
+  if (!response.ok) {
+    handleUnauthorized(response);
+    throw new Error(await responseError(response, path));
+  }
 }
 
 async function responseError(response: Response, path: string) {
@@ -165,6 +199,13 @@ async function getAllCollection<T extends { next_cursor?: string }, K extends ke
 export const api = {
   authStatus: () => getJSON<AuthStatus>(`${API_BASE}/auth/status`),
   authMe: () => getJSON<AuthPrincipal>(`${API_BASE}/auth/me`),
+  logout: () => postNoContent(`${API_BASE}/auth/logout`),
+  roleBindings: (projectKey: string) =>
+    getJSON<RoleBindingsResponse>(`${API_BASE}/projects/${encodeURIComponent(projectKey)}/role-bindings`),
+  grantRole: (projectKey: string, request: { user_id: number; team_id: number; role: string; reason: string; expires_at?: string }) =>
+    postJSON(`${API_BASE}/projects/${encodeURIComponent(projectKey)}/role-bindings`, request, crypto.randomUUID()),
+  revokeRole: (projectKey: string, bindingID: number, reason: string) =>
+    deleteJSON(`${API_BASE}/projects/${encodeURIComponent(projectKey)}/role-bindings?binding_id=${bindingID}&reason=${encodeURIComponent(reason)}`),
   projects: () => getJSON<ProjectListResponse>(`${API_BASE}/projects`),
   workflows: (projectKey?: string, options: CollectionOptions = {}) =>
     getAllCollection<WorkflowCollectionResponse, "workflows">("workflows", { project_key: projectKey, ...options }, "workflows"),
@@ -339,3 +380,12 @@ export const authSession = {
   setToken: (token: string) => sessionStorage.setItem(TOKEN_STORAGE_KEY, token.trim()),
   clearToken: () => sessionStorage.removeItem(TOKEN_STORAGE_KEY),
 };
+
+function cookieValue(name: string) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  for (const item of document.cookie.split(";")) {
+    const value = item.trim();
+    if (value.startsWith(prefix)) return decodeURIComponent(value.slice(prefix.length));
+  }
+  return "";
+}

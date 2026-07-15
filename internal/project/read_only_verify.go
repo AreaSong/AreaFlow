@@ -682,9 +682,6 @@ FOR UPDATE SKIP LOCKED`,
 }
 
 func writeAndInsertReadOnlyVerifyArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, worker WorkerRecord, task RunTaskRecord, lease LeaseRecord, gate ExecutionApprovalGate, targetPath string, readResult readOnlyVerifyFileResult, options ReadOnlyVerifyOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"project":                           record.Key,
 		"workflow_version":                  version.DisplayLabel,
@@ -716,7 +713,7 @@ func writeAndInsertReadOnlyVerifyArtifact(ctx context.Context, tx pgx.Tx, record
 		return ArtifactRecord{}, fmt.Errorf("marshal read-only verify report: %w", err)
 	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "read-only-verify", fmt.Sprintf("run-%d-task-%d-report.json", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}

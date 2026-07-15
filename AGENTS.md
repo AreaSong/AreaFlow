@@ -32,6 +32,9 @@
 - PostgreSQL 是 AreaFlow 的主状态源事实；文件用于配置、artifact 原文和审计导出。
 - 大内容不直接塞入数据库；数据库保存 metadata、hash、URI 和关联关系。
 - `events` 与 `audit_events` 采用 append-only 思路，历史事实不重写。
+- 全项目治理采用 `ASW-EWF-001@1.0.0`；规范快照、适用矩阵、责任角色和外部依赖见 `governance/**`。
+- 变更必须先判定 L0-L4，再应用 G0-G8、DoR、DoD、例外、发布观察和退役门禁。
+- fixture、preview、readiness、gate 或文档状态不能冒充真实发布、生产运行或外部依赖完成。
 
 ## 文档变更规则
 

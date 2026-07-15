@@ -1,12 +1,12 @@
 # Auth, Team, And Secret Boundary
 
-> Status: Proposed. 当前产品未开放真实登录、team enforcement、token enforcement、secret resolve 或 remote worker credential。
+> Status: Partially superseded. OIDC login、Web session、project role binding 和 scoped service token 已由当前产品文档接管；本文仅保留 team lifecycle、secret resolve 和 remote worker credential 的未来边界。
 
 ## Purpose
 
-本文定义 AreaFlow 从 single-user local service 走向 team / remote / secret-backed platform 前的 R4
-安全边界。它只收束设计、验收和开闸顺序，不启用真实登录、API token enforcement、team permission
-enforcement、secret resolve 或 remote worker credential issuance。
+本文保留 AreaFlow 走向 team / remote / secret-backed platform 的未实现 R4 边界。当前认证事实以
+[`docs/architecture/security.md`](../docs/architecture/security.md) 为准；本 proposal 不再描述 OIDC、session、
+project RBAC 或 service token 的当前行为。
 Team Console 和远程控制台作为产品控制面的分层见
 [`team-remote-control-boundary.md`](./team-and-remote-control.md)；本文中的 team permission
 enforcement 通过，不代表 Team Console 或远程 command apply 已经打开。
@@ -19,25 +19,22 @@ webhook signing secret 或 provider token 可以被任意 connector 复用。
 - `000009_v1_boundary_foundation` 已预留 `users`、`teams`、`memberships`、`api_tokens`、
   `secret_refs`、`engine_profiles` 和 `webhooks`；v1 目标模型还保留 project-scoped membership
   语义，用于后续把 team role 映射到具体 project scope。
-- v1.0 前这些表只表达长期边界，不代表多用户登录、token auth、secret 解析、webhook 调用或远程 worker
-  已打开。
+- `users`、OIDC identity、project role binding、Web session 和 service token lifecycle 已实现；`teams`、
+  membership administration、secret resolve、webhook 调用和远程 worker credential 仍未打开。
 - `project_key` 仍是 workflow、run、artifact、worker、secret、audit 和 API 查询的隔离边界。
 - 本机 single-user mode 继续使用稳定 actor，例如 `local-user` 和 `system`，避免后续审计补洞。
 
 ## Non-goals Before v1.x
 
-v1.0 之前禁止把以下能力解释为已打开：
+以下能力仍不得解释为已打开：
 
-- 真实用户登录或 session 管理。
-- Bearer token / API token 认证 enforcement。
-- API token issuance / rotation / revocation 作为真实权限入口。
-- team / role / membership 对业务 API 的强制授权。
+- team lifecycle、membership invitation 和 OIDC group 自动授权。
 - OS keychain、env、encrypted DB secret store 或外部 secret manager 的明文解析。
 - secret 注入 Codex CLI、OpenAI API、local model、external agent 或 worker 环境。
 - remote worker credential issuance、rotation、revocation 或 lease-scoped token。
 - webhook delivery、signing secret 或 third-party callback。
 
-v1.0 可以继续做的是 readiness、doctor、preview、fixture evidence 和 audit coverage gap 标注。
+OIDC、session、project role binding 和 service token 的当前行为不再由本 proposal 定义。
 
 ## Boundary Principles
 
@@ -135,20 +132,19 @@ token_rotated=false
 token_revoked=false
 ```
 
-### R4-2 Local Token Fixture
+### R4-2 Scoped Service Token
 
-Status: future fixture-only.
+Status: superseded by current implementation and [`docs/architecture/security.md`](../docs/architecture/security.md).
 
 Allowed:
 
-- 在 temporary fixture service 中验证 token hashing、scope parsing、expiration 和 revocation semantics。
+- 验证 token hashing、scope parsing、expiration、rotation 和 revocation semantics。
 - Token value 只在测试进程内出现一次；数据库只保存 hash。
 - 验证 token scope 与 `project_key` visibility guard 同时生效。
 
 Forbidden:
 
-- 默认要求 token。
-- 在真实 AreaMatrix dogfood 中开启 token enforcement。
+- 让 token capability 绕过 project scope、gate 或 approval。
 - 将 token 明文写入 logs、event、audit、artifact 或 config。
 
 Required evidence:
@@ -157,15 +153,15 @@ Required evidence:
 - Token mismatch returns `401`.
 - Scope mismatch returns `403` or `404` according to endpoint leak policy.
 - Logs and artifacts do not contain token value.
-- Existing no-auth local service mode remains available.
+- Development no-auth local service mode remains available.
 
-### R4-3 Optional Local Auth Enforcement
+### R4-3 Authentication Enforcement
 
-Status: v1.x opt-in.
+Status: superseded by current token/OIDC implementation；production 强制 OIDC。
 
 Allowed:
 
-- Local service 启动参数或配置显式开启 token enforcement。
+- Development 可显式开启 token enforcement，production 使用 OIDC session。
 - CLI / Web / Desktop 通过同一 auth header 访问 API。
 - Audit 记录 authenticated actor / token key / scope hash，不记录 token 明文。
 

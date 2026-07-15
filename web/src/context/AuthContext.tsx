@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { KeyRound, LogIn } from "lucide-react";
 import { api, authSession } from "../api";
 import type { AuthPrincipal, AuthStatus } from "../types";
+import { LoginPage } from "../pages/LoginPage";
 
 type AuthContextValue = {
   status: AuthStatus;
   principal: AuthPrincipal;
   allowsCapability: (capability: string) => boolean;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -53,7 +53,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       });
     const invalidate = () => {
       setPrincipal(null);
-      setError("Token 已失效，请重新输入。");
+      setError("会话已失效，请重新登录。");
     };
     window.addEventListener(authSession.eventName, invalidate);
     return () => {
@@ -75,16 +75,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
     status,
     principal,
     allowsCapability: (capability) => principal.capabilities.includes("*") || principal.capabilities.includes(capability),
-    signOut: () => {
+    signOut: async () => {
+      if (status.mode === "oidc") await api.logout();
       authSession.clearToken();
       setPrincipal(null);
       setError("");
     },
   } : null, [status, principal]);
 
-  if (loading) return <div className="auth-screen"><div className="auth-panel"><KeyRound size={24} /><strong>正在验证 AreaFlow 访问凭据</strong></div></div>;
+  if (loading) return <div className="auth-screen"><div className="auth-panel"><strong>正在验证 AreaFlow 访问凭据</strong></div></div>;
   if (!status) return <div className="auth-screen"><div className="auth-panel"><strong>无法读取认证状态</strong><p>{error}</p></div></div>;
-  if (!value) return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><KeyRound size={24} /><div><strong>连接 AreaFlow</strong><p>输入由 AreaFlow CLI 签发的本机会话 token。</p></div><label><span>API token</span><input type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" autoFocus /></label>{error ? <p className="form-error">{error}</p> : null}<button className="primary-button" type="submit" disabled={!token.trim()}><LogIn size={16} />登录</button></form></div>;
+  if (!value) return <LoginPage status={status} token={token} error={error} onTokenChange={setToken} onTokenSubmit={submit} />;
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

@@ -846,9 +846,6 @@ func updateRunTaskMetadata(ctx context.Context, tx pgx.Tx, taskID int64, additio
 }
 
 func writeAndInsertFixtureProjectWriteSetArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, task RunTaskRecord, options FixtureProjectWriteQueueOptions) (ArtifactRecord, string, int64, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, "", 0, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	afterSHA, afterSize := hashBytes([]byte(options.Content))
 	writeSet := fixtureProjectWriteSet{
 		Operation:              "modify",
@@ -868,7 +865,7 @@ func writeAndInsertFixtureProjectWriteSetArtifact(ctx context.Context, tx pgx.Tx
 		return ArtifactRecord{}, "", 0, fmt.Errorf("marshal fixture project write-set: %w", err)
 	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "fixture-project-write", fmt.Sprintf("run-%d-task-%d-write-set.json", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, "", 0, err
 	}
@@ -1010,20 +1007,11 @@ func loadFixtureProjectWriteSet(ctx context.Context, tx pgx.Tx, record Record, a
 	if err != nil {
 		return fixtureProjectWriteSet{}, ArtifactRecord{}, err
 	}
-	if artifact.StorageBackend != "local" {
-		return fixtureProjectWriteSet{}, ArtifactRecord{}, fmt.Errorf("write-set artifact must be local")
-	}
-	content, err := os.ReadFile(artifact.URI)
+	artifactContent, err := ReadArtifactContent(artifact)
 	if err != nil {
 		return fixtureProjectWriteSet{}, ArtifactRecord{}, fmt.Errorf("read fixture write-set artifact: %w", err)
 	}
-	sha, size := hashBytes(content)
-	if artifact.SHA256 != "" && sha != artifact.SHA256 {
-		return fixtureProjectWriteSet{}, ArtifactRecord{}, fmt.Errorf("write-set artifact hash mismatch")
-	}
-	if artifact.SizeBytes > 0 && size != artifact.SizeBytes {
-		return fixtureProjectWriteSet{}, ArtifactRecord{}, fmt.Errorf("write-set artifact size mismatch")
-	}
+	content := artifactContent.Content
 	var writeSet fixtureProjectWriteSet
 	if err := json.Unmarshal(content, &writeSet); err != nil {
 		return fixtureProjectWriteSet{}, ArtifactRecord{}, fmt.Errorf("parse fixture write-set artifact: %w", err)
@@ -1038,11 +1026,8 @@ func loadFixtureProjectWriteSet(ctx context.Context, tx pgx.Tx, record Record, a
 }
 
 func writeAndInsertFixtureProjectPreimageArtifact(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, task RunTaskRecord, targetPath string, preimage fixtureProjectFileImage, options FixtureProjectWriteOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "fixture-project-write", fmt.Sprintf("run-%d-task-%d-preimage.bin", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, preimage.Content, "application/octet-stream")
+	stored, err := writeProjectArtifact(record, relativePath, preimage.Content, "application/octet-stream")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}
@@ -1114,9 +1099,6 @@ RETURNING id, project_id, COALESCE(workflow_version_id, 0), COALESCE(workflow_it
 }
 
 func writeAndInsertFixtureProjectWriteReport(ctx context.Context, tx pgx.Tx, record Record, version WorkflowVersion, run RunRecord, worker WorkerRecord, task RunTaskRecord, lease LeaseRecord, gate ExecutionApprovalGate, writeSetArtifact ArtifactRecord, preimageArtifact ArtifactRecord, copyAttempt RunAttemptRecord, verifyAttempt RunAttemptRecord, rollbackAttempt RunAttemptRecord, writeSet fixtureProjectWriteSet, preimage fixtureProjectFileImage, afterImage fixtureProjectFileImage, restoredImage fixtureProjectFileImage, options FixtureProjectWriteOptions) (ArtifactRecord, error) {
-	if record.ArtifactBackend != "" && record.ArtifactBackend != "local" {
-		return ArtifactRecord{}, fmt.Errorf("unsupported artifact store backend %q", record.ArtifactBackend)
-	}
 	content, err := json.MarshalIndent(map[string]any{
 		"project":                           record.Key,
 		"workflow_version":                  version.DisplayLabel,
@@ -1168,7 +1150,7 @@ func writeAndInsertFixtureProjectWriteReport(ctx context.Context, tx pgx.Tx, rec
 		return ArtifactRecord{}, fmt.Errorf("marshal fixture project write report: %w", err)
 	}
 	relativePath := filepath.Join("versions", version.DisplayLabel, "fixture-project-write", fmt.Sprintf("run-%d-task-%d-report.json", run.ID, task.ID))
-	stored, err := writeLocalProjectArtifact(record, relativePath, content, "application/json")
+	stored, err := writeProjectArtifact(record, relativePath, content, "application/json")
 	if err != nil {
 		return ArtifactRecord{}, err
 	}

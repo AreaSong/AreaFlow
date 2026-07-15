@@ -1,0 +1,15 @@
+name: Incident follow-up
+description: Track a sanitized production incident review
+body:
+  - type: textarea
+    id: impact
+    attributes: {label: Severity, impact and timeline}
+    validations: {required: true}
+  - type: textarea
+    id: response
+    attributes: {label: Containment and recovery}
+    validations: {required: true}
+  - type: textarea
+    id: actions
+    attributes: {label: Root cause, owners, due dates and verification}
+    validations: {required: true}

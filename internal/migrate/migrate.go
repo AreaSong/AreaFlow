@@ -134,7 +134,7 @@ func Approve(ctx context.Context, pool *pgxpool.Pool, name string, actor string,
 		return ApprovalState{}, err
 	}
 	var ledgerExists bool
-	if err := pool.QueryRow(ctx, `SELECT to_regclass('public.migration_ledger') IS NOT NULL`).Scan(&ledgerExists); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT to_regclass('migration_ledger') IS NOT NULL`).Scan(&ledgerExists); err != nil {
 		return ApprovalState{}, fmt.Errorf("check migration ledger: %w", err)
 	}
 	if !ledgerExists {
@@ -224,8 +224,8 @@ func Approval(ctx context.Context, pool *pgxpool.Pool, name string) (ApprovalSta
 	state := ApprovalState{}
 	var tablesReady bool
 	if err := pool.QueryRow(ctx, `
-SELECT to_regclass('public.schema_migrations') IS NOT NULL
-   AND to_regclass('public.migration_ledger') IS NOT NULL`).Scan(&tablesReady); err != nil {
+SELECT to_regclass('schema_migrations') IS NOT NULL
+   AND to_regclass('migration_ledger') IS NOT NULL`).Scan(&tablesReady); err != nil {
 		return ApprovalState{}, fmt.Errorf("check migration approval tables: %w", err)
 	}
 	if !tablesReady {
@@ -509,7 +509,7 @@ func apply(ctx context.Context, pool *pgxpool.Pool, migration Migration) error {
 
 func checksumColumnsExist(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
 	var exists bool
-	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'sha256')`).Scan(&exists); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'schema_migrations' AND column_name = 'sha256')`).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check schema migration checksum columns: %w", err)
 	}
 	return exists, nil
@@ -517,7 +517,7 @@ func checksumColumnsExist(ctx context.Context, pool *pgxpool.Pool) (bool, error)
 
 func checksumColumnsExistTx(ctx context.Context, tx pgx.Tx) (bool, error) {
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'sha256')`).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'schema_migrations' AND column_name = 'sha256')`).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists, nil
@@ -583,7 +583,7 @@ func recordAppliedRunHashes(ctx context.Context, pool *pgxpool.Pool, applied map
 
 func migrationLedgerTableExists(ctx context.Context, tx pgx.Tx) (bool, error) {
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT to_regclass('public.migration_ledger') IS NOT NULL`).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT to_regclass('migration_ledger') IS NOT NULL`).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists, nil
