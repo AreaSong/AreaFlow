@@ -7,6 +7,6 @@
     "brand:validate": "node scripts/validate-areaflow-brand-assets.cjs"
   },
   "devDependencies": {
-    "sharp": "0.34.5"
+    "sharp": "0.35.3"
   }
 }
